@@ -1,0 +1,53 @@
+{
+  "id": 10,
+  "album": "animals",
+  "difficulty": "hard",
+  "targetClearRate": 0.4,
+  "grayOnComplete": false,
+  "mechanics": ["bigBlocks"],
+  "picture": {
+    "name": "여우",
+    "w": 10, "h": 10,
+    "palette": ["transparent", "#E8743B", "#FFFFFF", "#3D405B"],
+    "rows": [
+      "1000000001",
+      "1100000011",
+      "1211001121",
+      "1111111111",
+      "1131111311",
+      "2211111122",
+      "0222112220",
+      "0022222200",
+      "0002332000",
+      "0000220000"
+    ]
+  },
+  "sequence": [
+    {"shape": "I4H", "color": 1},
+    {"shape": "L3D", "color": 1},
+    {"shape": "O4", "color": 2},
+    {"shape": "O9", "color": 3},
+    {"shape": "Z4V", "color": 3},
+    {"shape": "I3H", "color": 3},
+    {"shape": "I4H", "color": 1},
+    {"shape": "O4", "color": 2},
+    {"shape": "R6V", "color": 2},
+    {"shape": "I4V", "color": 2},
+    {"shape": "I5H", "color": 1},
+    {"shape": "I4H", "color": 1},
+    {"shape": "L5D", "color": 1},
+    {"shape": "I5V", "color": 1},
+    {"shape": "L3C", "color": 2},
+    {"shape": "O4", "color": 2},
+    {"shape": "J4A", "color": 2},
+    {"shape": "I4H", "color": 3},
+    {"shape": "L4D", "color": 1},
+    {"shape": "I3V", "color": 1},
+    {"shape": "O9", "color": 1},
+    {"shape": "O4", "color": 1},
+    {"shape": "I4H", "color": 1},
+    {"shape": "L4D", "color": 2},
+    {"shape": "I2H", "color": 2},
+    {"shape": "L4B", "color": 2}
+  ]
+}
