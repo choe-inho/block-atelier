@@ -19,6 +19,9 @@ namespace BlockAtelier.Core
         int holdCapacity = 1;
         Block extraHold = Block.None;    // 보관함 +1 부스터용 두 번째 칸
 
+        /// <summary>새 블록이 들어올 때 색을 바꾸는 규칙 (다 칠한 색 처리). GameSession이 정한다.</summary>
+        public System.Func<int, int> ColorFilter;
+
         public ConveyorModel(List<Block> levelSequence)
         {
             sequence = levelSequence;
@@ -34,6 +37,7 @@ namespace BlockAtelier.Core
             hold = o.hold;
             holdCapacity = o.holdCapacity;
             extraHold = o.extraHold;
+            ColorFilter = o.ColorFilter;
         }
 
         public ConveyorModel Clone() { return new ConveyorModel(this); }
@@ -56,7 +60,11 @@ namespace BlockAtelier.Core
         void Refill()
         {
             while (visible.Count < VisibleCount && nextIndex < sequence.Count)
-                visible.Add(sequence[nextIndex++]);
+            {
+                var b = sequence[nextIndex++];
+                if (ColorFilter != null) b = b.WithColor(ColorFilter(b.Color));
+                visible.Add(b);
+            }
         }
 
         public Block Get(BlockSource src)

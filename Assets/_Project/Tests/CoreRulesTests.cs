@@ -171,6 +171,37 @@ namespace BlockAtelier.Tests
         }
 
         [Test]
+        public void 초반_레벨은_다_칠한_색의_블록이_필요한_색으로_바뀐다()
+        {
+            // 색2(4픽셀)를 다 칠하면 컨베이어에 남은 색2 블록과 앞으로 들어올 색2 블록이 색1로 바뀐다.
+            var seq = new List<Block> {
+                new Block("I4H", 2), new Block("I4H", 2), new Block("O1", 2), new Block("O1", 2),
+                new Block("O1", 1), new Block("O1", 2), new Block("O1", 2) };
+            var g = new GameSession(MakeLevel(seq, grayOnComplete: false));
+            g.TryPlace(C(0), 0, 0);
+            var r = g.TryPlace(C(0), 4, 0);
+            CollectionAssert.Contains(r.CompletedColors, 2);
+            Assert.IsTrue(r.ConveyorRecolored);
+            for (int i = 0; i < g.Conveyor.VisibleSlots; i++) Assert.AreEqual(1, g.Conveyor.Visible(i).Color, "칸 " + i);
+            g.TryPlace(C(0), 0, 3);
+            g.TryPlace(C(0), 1, 3);
+            for (int i = 0; i < g.Conveyor.VisibleSlots; i++) Assert.AreEqual(1, g.Conveyor.Visible(i).Color, "나중 칸 " + i);
+        }
+
+        [Test]
+        public void 회색_레벨은_다_칠한_색의_블록이_컨베이어에서도_회색()
+        {
+            var seq = new List<Block> {
+                new Block("I4H", 2), new Block("I4H", 2), new Block("O1", 2), new Block("O1", 1),
+                new Block("O1", 1), new Block("O1", 2) };
+            var g = new GameSession(MakeLevel(seq, grayOnComplete: true));
+            g.TryPlace(C(0), 0, 0);
+            g.TryPlace(C(0), 4, 0);
+            Assert.AreEqual(Cell.Gray, g.Conveyor.Visible(0).Color);
+            Assert.AreEqual(Cell.Gray, g.Conveyor.Visible(3).Color);
+        }
+
+        [Test]
         public void 가로와_세로를_함께_지우면_십자_폭발()
         {
             // 가로 0줄과 세로 0열을 같은 수에 완성시키고, (1,1)에 남은 칸이 폭발로 지워지는지 확인.

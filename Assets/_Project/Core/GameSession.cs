@@ -33,6 +33,8 @@ namespace BlockAtelier.Core
         public List<int> Grayed = new List<int>();
         public List<int> CompletedColors = new List<int>();
         public bool Exploded;
+        /// <summary>다 칠한 색의 블록이 컨베이어·보관함에서 다른 색으로 바뀌었는지</summary>
+        public bool ConveyorRecolored;
         public GameState StateAfter;
 
         public int LinesCleared { get { return ClearedRows.Count + ClearedCols.Count; } }
@@ -76,6 +78,7 @@ namespace BlockAtelier.Core
             Board = new BoardModel();
             Picture = new PictureModel(level);
             Conveyor = new ConveyorModel(level.Sequence);
+            Conveyor.ColorFilter = FilterColor;
             completed = new bool[level.ColorCount + 1];
             State = GameState.Playing;
             // 팔레트에 있지만 그림에 없는 색은 처음부터 완료 처리.
@@ -89,6 +92,7 @@ namespace BlockAtelier.Core
             Board = o.Board.Clone();
             Picture = o.Picture.Clone();
             Conveyor = o.Conveyor.Clone();
+            Conveyor.ColorFilter = FilterColor;
             completed = (bool[])o.completed.Clone();
             State = o.State;
             MovesUsed = o.MovesUsed;
@@ -287,7 +291,7 @@ namespace BlockAtelier.Core
             {
                 if (completed[col] || Picture.Remaining(col) > 0) continue;
                 r.CompletedColors.Add(col);
-                MarkCompleted(col, r.Grayed);
+                if (MarkCompleted(col, r.Grayed)) r.ConveyorRecolored = true;
             }
         }
 
@@ -301,17 +305,44 @@ namespace BlockAtelier.Core
             }
         }
 
-        void MarkCompleted(int color, List<int> grayed)
+        /// <summary>
+        /// 다 칠한 색의 블록 처리. 회색 규칙이 켜진 레벨은 회색으로,
+        /// 초반 레벨(꺼짐)은 아직 필요한 색 중 가장 많이 남은 색으로 바꿔 준다.
+        /// </summary>
+        int FilterColor(int c)
+        {
+            if (c < 1 || c > Level.ColorCount || !completed[c]) return c;
+            if (Level.GrayOnComplete) return Cell.Gray;
+            int m = Picture.MostNeededColor();
+            return m == 0 ? c : m;
+        }
+
+        bool MarkCompleted(int color, List<int> grayed)
         {
             completed[color] = true;
-            if (!Level.GrayOnComplete) return;
+            if (!Level.GrayOnComplete)
+            {
+                int m = Picture.MostNeededColor();
+                if (m == 0) return false;
+                bool had = HasOnConveyor(color);
+                Conveyor.Recolor(color, m);
+                return had;
+            }
             for (int i = 0; i < BoardModel.Size * BoardModel.Size; i++)
             {
                 if (Board.Get(i) != color) continue;
                 Board.Set(i, Cell.Gray);
                 if (grayed != null) grayed.Add(i);
             }
+            bool any = HasOnConveyor(color);
             Conveyor.Recolor(color, Cell.Gray);
+            return any;
+        }
+
+        bool HasOnConveyor(int color)
+        {
+            for (int i = 0; i < Conveyor.VisibleSlots; i++) if (Conveyor.Visible(i).Color == color) return true;
+            return Conveyor.Hold(0).Color == color && !Conveyor.Hold(0).IsNone || Conveyor.Hold(1).Color == color && !Conveyor.Hold(1).IsNone;
         }
 
         void UpdateState()

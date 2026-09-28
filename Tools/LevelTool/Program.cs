@@ -161,12 +161,12 @@ static class LevelTool
     static int WeightedColor(double[] need, Random rng)
     {
         double sum = 0;
-        // 적은 색도 너무 안 나오지 않게 제곱근 가중
-        for (int c = 1; c < need.Length; c++) sum += Math.Sqrt(need[c]);
+        // 필요량에 비례 (다 칠한 색은 컨베이어에서 필요한 색으로 바뀌므로 적은 색을 억지로 늘리지 않는다)
+        for (int c = 1; c < need.Length; c++) sum += need[c];
         double t = rng.NextDouble() * sum;
         for (int c = 1; c < need.Length; c++)
         {
-            t -= Math.Sqrt(need[c]);
+            t -= need[c];
             if (t <= 0) return c;
         }
         return need.Length - 1;

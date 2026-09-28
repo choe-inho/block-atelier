@@ -26,7 +26,7 @@
     {"shape": "I4V", "color": 1},
     {"shape": "L3C", "color": 2},
     {"shape": "I4V", "color": 2},
-    {"shape": "I4V", "color": 3},
+    {"shape": "I4V", "color": 2},
     {"shape": "I4V", "color": 1},
     {"shape": "R6H", "color": 1},
     {"shape": "O4", "color": 1},
@@ -37,9 +37,9 @@
     {"shape": "I4V", "color": 3},
     {"shape": "I4V", "color": 3},
     {"shape": "I3V", "color": 1},
-    {"shape": "O4", "color": 2},
-    {"shape": "L3A", "color": 2},
-    {"shape": "I5V", "color": 2},
+    {"shape": "O4", "color": 1},
+    {"shape": "L3A", "color": 1},
+    {"shape": "I5V", "color": 1},
     {"shape": "L3B", "color": 1},
     {"shape": "I2V", "color": 1},
     {"shape": "I4V", "color": 1},
@@ -54,7 +54,7 @@
     {"shape": "O4", "color": 1},
     {"shape": "I4H", "color": 1},
     {"shape": "T4A", "color": 1},
-    {"shape": "I4V", "color": 3},
+    {"shape": "I4V", "color": 2},
     {"shape": "J4A", "color": 1},
     {"shape": "I3H", "color": 1},
     {"shape": "I2V", "color": 1},
@@ -69,8 +69,8 @@
     {"shape": "I5H", "color": 1},
     {"shape": "L3D", "color": 1},
     {"shape": "I5H", "color": 1},
-    {"shape": "I2H", "color": 2},
-    {"shape": "I2V", "color": 2},
-    {"shape": "O4", "color": 2}
+    {"shape": "I2H", "color": 1},
+    {"shape": "I2V", "color": 1},
+    {"shape": "O4", "color": 1}
   ]
 }

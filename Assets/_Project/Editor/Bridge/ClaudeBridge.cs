@@ -25,6 +25,7 @@ namespace BlockAtelier.Bridge
         static ClaudeBridge()
         {
             Directory.CreateDirectory(LogDir);
+            PlayerSettings.runInBackground = true;
             CompilationPipeline.compilationStarted += _ => Write("claude_compile.txt", "컴파일 시작 " + Now() + "\n", false);
             CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompiled;
             Application.logMessageReceivedThreaded += OnLog;
@@ -77,6 +78,8 @@ namespace BlockAtelier.Bridge
 
         static void Poll()
         {
+            // 에디터가 뒤에 있어도 플레이 모드가 계속 돌도록
+            if (EditorApplication.isPlaying && !EditorApplication.isPaused) EditorApplication.QueuePlayerLoopUpdate();
             if (EditorApplication.timeSinceStartup < nextPoll) return;
             nextPoll = EditorApplication.timeSinceStartup + 0.4;
             var path = P("claude_cmd.txt");
