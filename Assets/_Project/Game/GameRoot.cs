@@ -62,6 +62,7 @@ namespace BlockAtelier.Game
 
         // 자동 데모 (개발용)
         bool demo;
+        TutorialHand hand;
         float demoTimer;
 
         void Awake()
@@ -122,6 +123,7 @@ namespace BlockAtelier.Game
 
             LoadLevels();
             LoadProgress();
+            Sfx.Muted = PlayerPrefs.GetInt("ba_mute", 0) == 1;
             Layout(cam.aspect);
             StartLevel(Mathf.Clamp(PlayerPrefs.GetInt("ba_level", 0), 0, levels.Count - 1));
         }
@@ -229,6 +231,8 @@ namespace BlockAtelier.Game
             titleText.supportRichText = true;
             BuildChips();
             RenderAll();
+            HideHand();
+            if (levelIndex == 0 && !cleared.Contains(lv.Id)) Tween.After(0.9f, ShowHand);
 
             // 등장 연출: 보드 칸이 대각선으로 톡톡
             for (int i = 0; i < 64; i++)
@@ -344,8 +348,28 @@ namespace BlockAtelier.Game
             BeginDrag(src, wp);
         }
 
+        void ShowHand()
+        {
+            if (hand != null || game.MovesUsed > 0 || demo) return;
+            var bot = new AutoSolver(1, 0);
+            AutoSolver.Action a;
+            if (!bot.ChooseAction(game, out a) || a.IsStash) return;
+            var block = game.GetBlock(a.Source);
+            var shape = block.Shape;
+            var piece = BuildPiece(block, 34);
+            var offset = new Vector3(-(shape.Width - 1) * BoardView.Pitch * 0.5f, (shape.Height - 1) * BoardView.Pitch * 0.5f, 0f);
+            hand = TutorialHand.Show(transform, piece, tray.SlotWorld(a.Source) + offset, board.CellWorld(BoardModel.Index(a.X, a.Y)));
+        }
+
+        void HideHand()
+        {
+            if (hand != null) Destroy(hand.gameObject);
+            hand = null;
+        }
+
         void BeginDrag(BlockSource src, Vector3 wp)
         {
+            HideHand();
             var block = game.GetBlock(src);
             if (block.IsNone) return;
             dragSrc = src;
@@ -794,7 +818,7 @@ namespace BlockAtelier.Game
             UI.Label(overlayCanvas, game.Level.PictureName + " 완성!", new Vector2(0f, 5.3f), 0.8f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
             BigPicture(2.1f, 4.6f, true);
             UI.Label(overlayCanvas, game.MovesUsed + "수  ·  되돌리기 " + (3 - undoLeft) + "  ·  이어하기 " + game.ContinuesUsed,
-                     new Vector2(0f, -0.9f), 0.3f, UI.Muted);
+                     new Vector2(0f, -0.9f), 0.38f, UI.Muted);
             bool hasNext = levelIndex < levels.Count - 1;
             if (hasNext) OverlayButton("다음 레벨", -2.6f, true, () => StartLevel(levelIndex + 1));
             else UI.Label(overlayCanvas, "앨범 1의 그림을 모두 완성했어요", new Vector2(0f, -2.6f), 0.34f, UI.Ink);
@@ -826,14 +850,14 @@ namespace BlockAtelier.Game
         {
             if (busy && game.State == GameState.Playing) return;
             CancelDrag();
-            OpenOverlay(14.4f);
-            UI.Label(overlayCanvas, "동물 친구들", new Vector2(0f, 6.3f), 0.7f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
-            UI.Label(overlayCanvas, "앨범 1 · 그림 " + cleared.Count + " / " + levels.Count, new Vector2(0f, 5.5f), 0.3f, UI.Muted);
+            OpenOverlay(15.2f);
+            UI.Label(overlayCanvas, "동물 친구들", new Vector2(0f, 6.7f), 0.7f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
+            UI.Label(overlayCanvas, "앨범 1 · 그림 " + cleared.Count + " / " + levels.Count, new Vector2(0f, 5.9f), 0.3f, UI.Muted);
             for (int i = 0; i < levels.Count; i++)
             {
                 int col = i % 3, row = i / 3;
                 if (i == 9) col = 1;
-                var pos = new Vector2(-2.6f + col * 2.6f, 3.6f - row * 2.55f);
+                var pos = new Vector2(-2.6f + col * 2.6f, 4.4f - row * 2.55f);
                 var lv = levels[i];
                 bool done = cleared.Contains(lv.Id);
                 int idx = i;
@@ -848,7 +872,14 @@ namespace BlockAtelier.Game
                 UI.Label(overlayCanvas, lv.Id + (lv.Difficulty == "hard" ? " 어려움" : ""), new Vector2(pos.x, pos.y - 0.86f), 0.24f,
                          lv.Difficulty == "hard" ? UI.Hard : UI.Ink);
             }
-            OverlayButton("닫기", -6.3f, false, HideOverlay);
+            var snd = OverlayButton(Sfx.Muted ? "소리 켜기" : "소리 끄기", -5.35f, false, null);
+            snd.OnClick = () =>
+            {
+                Sfx.Muted = !Sfx.Muted;
+                PlayerPrefs.SetInt("ba_mute", Sfx.Muted ? 1 : 0);
+                snd.Label.text = Sfx.Muted ? "소리 켜기" : "소리 끄기";
+            };
+            OverlayButton("닫기", -6.65f, false, HideOverlay);
         }
 
         // ---------------- 캡처 (개발용) ----------------
@@ -895,6 +926,7 @@ namespace BlockAtelier.Game
                 return;
             }
             busy = true;
+            HideHand();
             var block = game.GetBlock(a.Source);
             var fp = BuildPiece(block, 20);
             var from = tray.SlotWorld(a.Source);

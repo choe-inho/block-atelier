@@ -6,6 +6,8 @@
 
 | 경로 | 내용 |
 | --- | --- |
+| `Assets/_Project/Game` | 화면, 조작, 이펙트, 효과음 (코드로 조립, 에셋 없이 동작) |
+| `Assets/_Project/Editor/Bridge` | Claude 자동화 다리: 컴파일·콘솔 로그, 명령 파일, 테스트 실행 |
 | `Assets/_Project/Core` | 게임 규칙 전체 (UnityEngine 의존 없음). `GameSession`이 한 판을 담당 |
 | `Assets/_Project/Core/Sim/AutoSolver.cs` | 자동 풀이 봇. 난이도 측정용, 나중에 힌트 기능에도 사용 |
 | `Assets/_Project/Tests` | 규칙 테스트 16개 (Unity Test Runner, EditMode) |
@@ -15,7 +17,29 @@
 | `Tools/art` | 픽셀 그림 원본과 미리보기 렌더러 (Python) |
 | `Tools/WebPrototype` | 폰에서 해보는 웹 프로토타입 (같은 규칙의 JS 버전) |
 
-뷰(MonoBehaviour), 광고, 결제는 아직 없다. 다음 단계에서 코어 위에 붙인다.
+광고, 결제, 분석 SDK는 아직 없다. 코어와 화면 위에 인터페이스로 붙일 예정.
+
+## 플레이
+
+`Assets/Scenes/SampleScene`을 열고 Play. 씬에 아무것도 없어도 `GameRoot`가 자동으로 생긴다.
+Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면과 같다.
+
+- 블록을 끌어 보드에 놓는다. 보관함에 끌어 넣으면 보관.
+- 줄을 지우면 페인트가 그림으로 날아간다. 같은 색 한 줄은 2배(붓질), 가로·세로 동시 제거는 십자 폭발.
+- 레벨 버튼: 레벨 목록, 소리 켜기/끄기.
+
+## 이펙트 조절
+
+`Game/Fx.cs` 위쪽의 `DropTime`, `DropStagger`, `ShakePerLine`, `ShakeExplode`와
+`GameRoot.PlayMove`의 대기 시간으로 손맛을 조절한다. 블룸은 `GameRoot.SetupPost`.
+
+## 에디터 자동화 (개발용)
+
+`Logs/claude_cmd.txt`에 한 줄씩 쓰면 에디터가 실행한다: `refresh`, `play`, `stop`, `tests`, `projectsetup`, `ping`.
+플레이 중에는 `Logs/claude_game.txt`로 게임 명령을 보낸다:
+`level N`, `demo`, `demo off`, `speed X`, `wait 초`, `shot 이름`, `shots 이름 개수 간격`,
+`place 슬롯 x y`, `fillrow y 색 빈칸`, `fillcol x 색 빈칸`, `give 모양 색 ...`, `until Won 초`, `state`, `reset`.
+캡처는 `Logs/shots/`에 1080x2340으로 저장된다.
 
 ## Unity에서 여는 법
 

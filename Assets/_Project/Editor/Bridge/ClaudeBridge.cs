@@ -129,6 +129,15 @@ namespace BlockAtelier.Bridge
                 case "tests":
                     RunTests();
                     return "시작";
+                case "projectsetup":
+                    PlayerSettings.productName = "블록 아틀리에";
+                    PlayerSettings.companyName = "Inho";
+                    PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
+                    PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Android, "com.inho.blockatelier");
+                    PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.iOS, "com.inho.blockatelier");
+                    PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Standalone, "com.inho.blockatelier");
+                    AssetDatabase.SaveAssets();
+                    return "ok";
                 case "ping":
                     return "pong " + (EditorApplication.isCompiling ? "컴파일 중" : "대기") + (EditorApplication.isPlaying ? " 플레이 중" : "");
                 default:
