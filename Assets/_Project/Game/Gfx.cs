@@ -393,6 +393,33 @@ namespace BlockAtelier.Game
             return Color.Lerp(shaded, canvas, 0.7f);
         }
 
+        static readonly System.Collections.Generic.Dictionary<string, Sprite> avatarCache = new System.Collections.Generic.Dictionary<string, Sprite>();
+
+        /// <summary>픽셀 캐릭터 (24x24, 선명한 점). 같은 조합은 한 번만 만든다.</summary>
+        public static Sprite AvatarSprite(Core.AvatarSpec spec)
+        {
+            string key = spec.Code;
+            Sprite s;
+            if (avatarCache.TryGetValue(key, out s) && s != null) return s;
+            var px = Core.AvatarArt.Render(spec);
+            int n = Core.AvatarArt.Size;
+            var t = NewTex(n, n);
+            t.filterMode = FilterMode.Point;
+            var cols = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    uint v = px[y * n + x];
+                    cols[(n - 1 - y) * n + x] = new Color32((byte)(v >> 16), (byte)(v >> 8), (byte)v, (byte)(v >> 24));
+                }
+            t.SetPixels32(cols);
+            t.Apply();
+            s = Sprite.Create(t, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            if (avatarCache.Count > 64) avatarCache.Clear();
+            avatarCache[key] = s;
+            return s;
+        }
+
         public static Sprite PictureSprite(Core.LevelData lv, bool colored)
         {
             int w = lv.PictureWidth, h = lv.PictureHeight;

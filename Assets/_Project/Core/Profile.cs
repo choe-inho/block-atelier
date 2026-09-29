@@ -58,15 +58,15 @@ namespace BlockAtelier.Core
         }
     }
 
-    /// <summary>마이페이지 정보: 닉네임과 대표 그림(레벨 번호, 0이면 아직 없음).</summary>
+    /// <summary>마이페이지 정보: 닉네임과 픽셀 캐릭터.</summary>
     public sealed class PlayerProfile
     {
         public string Nickname = "";
-        public int AvatarLevelId;
+        public AvatarSpec Look;
 
         public static PlayerProfile CreateGuest(int seed)
         {
-            return new PlayerProfile { Nickname = Core.Nickname.Suggest(seed), AvatarLevelId = 0 };
+            return new PlayerProfile { Nickname = Core.Nickname.Suggest(seed), Look = AvatarSpec.Random(seed) };
         }
 
         /// <summary>규칙에 맞으면 바꾸고 null, 아니면 이유를 돌려주고 그대로 둔다.</summary>
@@ -79,7 +79,7 @@ namespace BlockAtelier.Core
 
         public string ToJson()
         {
-            return MiniJson.Serialize(new Dictionary<string, object> { { "v", 1 }, { "nickname", Nickname }, { "avatar", AvatarLevelId } });
+            return MiniJson.Serialize(new Dictionary<string, object> { { "v", 1 }, { "nickname", Nickname }, { "look", Look.Code } });
         }
 
         public static PlayerProfile FromJson(string json, int seedIfNew)
@@ -93,7 +93,8 @@ namespace BlockAtelier.Core
                     object v;
                     if (root.TryGetValue("nickname", out v) && v is string && Core.Nickname.Validate((string)v) == null) p.Nickname = (string)v;
                     else p.Nickname = Core.Nickname.Suggest(seedIfNew);
-                    if (root.TryGetValue("avatar", out v) && v != null) p.AvatarLevelId = Convert.ToInt32(v, CultureInfo.InvariantCulture);
+                    AvatarSpec? look = root.TryGetValue("look", out v) ? AvatarSpec.Parse(v as string) : null;
+                    p.Look = look ?? AvatarSpec.Random(seedIfNew);
                     return p;
                 }
             }

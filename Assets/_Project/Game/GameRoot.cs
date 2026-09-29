@@ -1484,6 +1484,8 @@ namespace BlockAtelier.Game
                     }
                     case "mypage": ShowScreen(Page.MyPage); break;
                     case "settings": ShowScreen(Page.Settings); break;
+                    case "avatar": ShowScreen(Page.Avatar); break;
+                    case "look": { var lk = AvatarSpec.Parse(parts[1]); if (lk != null) { profile.Look = lk.Value; SaveProfile(); if (screen != Page.Game) BuildScreen(); } break; }
                     case "nick": ApplyNickname(raw.Trim().Substring(5)); break;
                     case "album": albumPage = int.Parse(parts[1]) - 1; ShowLevels(); break;
                     case "close": HideOverlay(); break;

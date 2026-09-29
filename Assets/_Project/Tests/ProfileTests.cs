@@ -39,11 +39,39 @@ namespace BlockAtelier.Tests
             Assert.AreEqual(before, p.Nickname);
             Assert.IsTrue(p.TrySetNickname(" 새이름 ") == null);
             Assert.AreEqual("새이름", p.Nickname);
-            p.AvatarLevelId = 12;
+            p.Look = p.Look.With(1, 4).With(7, 2);
             var q = PlayerProfile.FromJson(p.ToJson(), 1);
             Assert.AreEqual("새이름", q.Nickname);
-            Assert.AreEqual(12, q.AvatarLevelId);
+            Assert.AreEqual(p.Look.Code, q.Look.Code);
             Assert.AreEqual(Nickname.Suggest(3), PlayerProfile.FromJson("{깨진", 3).Nickname);
+        }
+
+        [Test]
+        public void 캐릭터_코드는_되읽어도_같고_범위를_넘으면_접힌다()
+        {
+            var a = AvatarSpec.Random(5);
+            Assert.AreEqual(a.Code, AvatarSpec.Parse(a.Code).Value.Code);
+            Assert.AreEqual(AvatarSpec.Random(5).Code, a.Code);
+            Assert.IsTrue(AvatarSpec.Parse("s1h2") == null);          // 부위가 빠짐
+            Assert.IsTrue(AvatarSpec.Parse("x1h2c0e0m0o0p0a0") == null);
+            Assert.AreEqual(0, a.With(1, a.PartCount(1)).Hair);        // 한 바퀴 돌면 처음으로
+            Assert.AreEqual(a.PartCount(0) - 1, a.With(0, -1).Skin);
+        }
+
+        [Test]
+        public void 모든_캐릭터_부위를_그릴_수_있다()
+        {
+            var s = new AvatarSpec();
+            for (int part = 0; part < AvatarSpec.Keys.Length; part++)
+                for (int v = 0; v < s.PartCount(part); v++)
+                {
+                    var px = AvatarArt.Render(s.With(part, v));
+                    Assert.AreEqual(AvatarArt.Size * AvatarArt.Size, px.Length);
+                    int filled = 0;
+                    foreach (var c in px) if (c != 0) filled++;
+                    Assert.IsTrue(filled > 200, "part " + part + " value " + v);
+                    Assert.AreEqual(0u, px[0]);                                 // 왼쪽 위 모서리는 비어 있음
+                }
         }
 
         [Test]

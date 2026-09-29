@@ -12,7 +12,7 @@ namespace BlockAtelier.Game
     /// </summary>
     public sealed partial class GameRoot
     {
-        enum Page { Game, Home, MyPage, Settings }
+        enum Page { Game, Home, MyPage, Settings, Avatar }
 
         Page screen = Page.Game;
         Transform screenRoot;
@@ -113,6 +113,7 @@ namespace BlockAtelier.Game
                 case Page.Home: BuildHome(); break;
                 case Page.MyPage: BuildMyPage(); break;
                 case Page.Settings: BuildSettings(); break;
+                case Page.Avatar: BuildAvatarEditor(); break;
             }
             FitScreen();
         }
@@ -268,26 +269,11 @@ namespace BlockAtelier.Game
             ScreenLabel(a.Stars.ToString(), pos + new Vector2(w * 0.5f - 0.8f, -1.28f), 0.22f, UI.Muted, TextAnchor.MiddleLeft, 0.8f);
         }
 
-        /// <summary>프로필 동그라미: 대표 그림이 있으면 그 그림, 없으면 닉네임 첫 글자</summary>
+        /// <summary>프로필: 픽셀 캐릭터를 캔버스색 둥근 판 위에</summary>
         void AvatarBadge(Vector3 pos, float size, int order)
         {
-            var bg = ScreenSprite("AvatarBg", Gfx.Circle, pos, size, UI.Canvas, order);
-            var lv = AvatarLevel();
-            if (lv != null)
-                ScreenSprite("Avatar", Gfx.PictureSprite(lv, true), pos, size * 0.78f, Color.white, order + 1);
-            else
-            {
-                bg.color = Gfx.Hex("#FFD166");
-                string first = profile.Nickname.Length > 0 ? profile.Nickname.Substring(0, 1) : "?";
-                ScreenLabel(first, pos, size * 0.45f, UI.ButtonPriInk, TextAnchor.MiddleCenter, size, true);
-            }
-        }
-
-        LevelData AvatarLevel()
-        {
-            if (profile.AvatarLevelId <= 0 || !progress.Get(profile.AvatarLevelId).Cleared) return null;
-            foreach (var l in levels) if (l.Id == profile.AvatarLevelId) return l;
-            return null;
+            UI.Panel("AvatarBg", screenRoot, pos, new Vector2(size, size), UI.Canvas, order);
+            ScreenSprite("Avatar", Gfx.AvatarSprite(profile.Look), pos, size * 0.86f, Color.white, order + 1);
         }
 
         /// <summary>그리던 판(같은 레벨, 한 수 이상 둠, 아직 진행 중)이 있으면 그대로 돌아간다.</summary>
@@ -317,18 +303,10 @@ namespace BlockAtelier.Game
             float yTop = screenH * 0.5f, x0 = -screenW * 0.5f;
             ScreenHeader("마이페이지", yTop - 0.6f);
 
-            // 대표 그림: 완성한 그림 중에서 고른다
-            var owned = new List<LevelData>();
-            foreach (var l in levels) if (progress.Get(l.Id).Cleared) owned.Add(l);
+            // 픽셀 캐릭터
             float ay = yTop - 3.3f;
-            AvatarBadge(new Vector3(0f, ay, 0f), 3.2f, 22);
-            if (owned.Count > 0)
-            {
-                ScreenButton("<", new Vector2(-2.6f, ay), new Vector2(0.95f, 0.95f), false, 22, () => CycleAvatar(owned, -1));
-                ScreenButton(">", new Vector2(2.6f, ay), new Vector2(0.95f, 0.95f), false, 22, () => CycleAvatar(owned, +1));
-            }
-            ScreenLabel(owned.Count > 0 ? "대표 그림  ·  완성한 그림 " + owned.Count + "장 중에서 골라요" : "그림을 완성하면 대표 그림으로 쓸 수 있어요",
-                        new Vector2(0f, ay - 1.95f), 0.24f, UI.Muted);
+            AvatarBadge(new Vector3(0f, ay, 0f), 3.3f, 22);
+            ScreenButton("꾸미기", new Vector2(0f, ay - 2.2f), new Vector2(2.4f, 0.8f), false, 22, () => ShowScreen(Page.Avatar));
 
             // 닉네임
             float ny = yTop - 6.55f;
@@ -374,16 +352,6 @@ namespace BlockAtelier.Game
             ScreenLabel(label, pos + new Vector2(0f, -0.45f), 0.22f, UI.Muted, TextAnchor.MiddleCenter, w);
         }
 
-        void CycleAvatar(List<LevelData> owned, int dir)
-        {
-            int cur = -1;
-            for (int i = 0; i < owned.Count; i++) if (owned[i].Id == profile.AvatarLevelId) cur = i;
-            int next = cur < 0 ? (dir > 0 ? 0 : owned.Count - 1) : (cur + dir + owned.Count) % owned.Count;
-            profile.AvatarLevelId = owned[next].Id;
-            SaveProfile();
-            BuildScreen();
-        }
-
         /// <summary>폰에서는 시스템 키보드를 연다. 에디터는 키보드가 없어서 개발 명령(nick 이름)으로 시험한다.</summary>
         void OpenNicknameKeyboard()
         {
@@ -414,6 +382,62 @@ namespace BlockAtelier.Game
             if (err == null) { SaveProfile(); nickMessage = "이름을 바꿨어요"; nickMessageIsError = false; }
             else { nickMessage = err; nickMessageIsError = true; }
             if (screen == Page.MyPage) BuildScreen();
+        }
+
+        // ---------------- 캐릭터 꾸미기 ----------------
+
+        static readonly string[] PartLabels = { "피부", "머리 모양", "머리 색", "눈", "입", "옷", "옷 색", "장식" };
+
+        /// <summary>큰 미리보기 + 부위마다 &lt; 값 &gt; 한 줄. 바꾸는 즉시 저장.</summary>
+        void BuildAvatarEditor()
+        {
+            screenW = 9.6f;
+            const float rowH = 0.95f;
+            screenH = 7.4f + PartLabels.Length * (rowH + 0.14f) + 1.3f;
+            float yTop = screenH * 0.5f, x0 = -screenW * 0.5f;
+            ScreenButton("<", new Vector2(x0 + 0.55f, yTop - 0.6f), new Vector2(1.1f, 1.1f), false, 22, () => ShowScreen(Page.MyPage));
+            ScreenLabel("캐릭터 꾸미기", new Vector2(x0 + 1.45f, yTop - 0.6f), 0.52f, UI.Ink, TextAnchor.MiddleLeft, 7f, true);
+            AvatarBadge(new Vector3(0f, yTop - 3.9f, 0f), 4.6f, 22);
+
+            float y = yTop - 7.0f;
+            var look = profile.Look;
+            for (int part = 0; part < PartLabels.Length; part++)
+            {
+                int pp = part;
+                UI.Panel("Row", screenRoot, new Vector2(0f, y), new Vector2(screenW, rowH), CardColor, 20);
+                ScreenLabel(PartLabels[part], new Vector2(x0 + 0.35f, y), 0.3f, UI.Ink, TextAnchor.MiddleLeft, 3f, true);
+                int v = look.Get(part), n = look.PartCount(part);
+                float cx = 1.3f;
+                ScreenButton("<", new Vector2(cx - 2.25f, y), new Vector2(0.8f, 0.72f), false, 22, () => ChangePart(pp, -1));
+                ScreenButton(">", new Vector2(cx + 2.25f, y), new Vector2(0.8f, 0.72f), false, 22, () => ChangePart(pp, +1));
+                string[] colors = part == 0 ? AvatarSpec.SkinColors : part == 2 ? AvatarSpec.HairColors : part == 6 ? AvatarSpec.OutfitColors : null;
+                if (colors != null)
+                {
+                    UI.Panel("Swatch", screenRoot, new Vector2(cx - 0.45f, y), new Vector2(1.3f, 0.52f), Gfx.Hex(colors[v]), 21);
+                    ScreenLabel((v + 1) + "/" + n, new Vector2(cx + 0.95f, y), 0.24f, UI.Muted, TextAnchor.MiddleCenter, 1.2f);
+                }
+                else
+                {
+                    string[] names = part == 1 ? AvatarSpec.HairNames : part == 3 ? AvatarSpec.EyeNames : part == 4 ? AvatarSpec.MouthNames
+                                   : part == 5 ? AvatarSpec.OutfitNames : AvatarSpec.AccessoryNames;
+                    ScreenLabel(names[v], new Vector2(cx, y), 0.28f, UI.Ink, TextAnchor.MiddleCenter, 3.4f, true);
+                }
+                y -= rowH + 0.14f;
+            }
+            ScreenButton("무작위", new Vector2(-1.5f, y - 0.35f), new Vector2(2.8f, 0.9f), false, 22, () =>
+            {
+                profile.Look = AvatarSpec.Random(Random.Range(1, 1000000));
+                SaveProfile();
+                BuildScreen();
+            });
+            ScreenButton("완료", new Vector2(1.5f, y - 0.35f), new Vector2(2.8f, 0.9f), true, 22, () => ShowScreen(Page.MyPage));
+        }
+
+        void ChangePart(int part, int dir)
+        {
+            profile.Look = profile.Look.With(part, profile.Look.Get(part) + dir);
+            SaveProfile();
+            BuildScreen();
         }
 
         // ---------------- 설정 ----------------
@@ -469,8 +493,6 @@ namespace BlockAtelier.Game
             {
                 progress = new Progress();
                 SaveProgress();
-                profile.AvatarLevelId = 0;
-                SaveProfile();
                 StartLevel(0);
                 ShowScreen(Page.Settings);
                 ScreenToast("초기화했어요", 0f);
