@@ -175,17 +175,42 @@ namespace BlockAtelier.Game
 
         // ---------------- 배치 ----------------
 
+        // 노치·펀치홀·홈 표시줄을 피한 영역. 화면 높이에 대한 위/아래 비율.
+        Vector2? safeOverride;     // 개발용: 캡처할 때 기기별 안전 영역 흉내
+        Rect lastSafe;
+
+        Vector2 SafeInsets()
+        {
+            if (safeOverride.HasValue) return safeOverride.Value;
+            var sa = Screen.safeArea;
+            float h = Mathf.Max(1f, Screen.height);
+            float topIn = Mathf.Clamp01((Screen.height - sa.yMax) / h);
+            float botIn = Mathf.Clamp01(sa.yMin / h);
+            return new Vector2(Mathf.Min(topIn, 0.12f), Mathf.Min(botIn, 0.08f));
+        }
+
+        /// <summary>
+        /// 어떤 비율의 화면이든 설계 영역(가로 DesignW x 세로 DesignH)이 안전 영역 안에 통째로 들어가게 카메라를 맞춘다.
+        /// 긴 폰: 위아래 요소는 가장자리로, 보드는 가운데. 넓은 화면(태블릿·폴드): 높이에 맞추고 좌우는 배경.
+        /// </summary>
         void Layout(float aspect)
         {
             lastAspect = aspect;
-            float size = Mathf.Max(DesignH * 0.5f, DesignW * 0.5f / aspect);
+            lastSafe = Screen.safeArea;
+            var ins = SafeInsets();
+            float usable = Mathf.Max(0.5f, 1f - ins.x - ins.y);
+            float size = Mathf.Max(DesignH * 0.5f / usable, DesignW * 0.5f / aspect);
             cam.orthographicSize = size;
             float halfW = size * aspect;
-            top.localPosition = new Vector3(0f, size, 0f);
-            bottom.localPosition = new Vector3(0f, -size, 0f);
-            // 세로가 남으면 보드를 가운데 쪽으로, 위아래 요소는 가장자리에 붙인다
-            middle.localPosition = new Vector3(0f, Mathf.Clamp((size - DesignH * 0.5f) * -0.15f, -1f, 0f), 0f);
-            overlayRoot.localPosition = Vector3.zero;
+            float topY = size - 2f * size * ins.x;          // 안전 영역 위쪽 끝
+            float botY = -size + 2f * size * ins.y;         // 안전 영역 아래쪽 끝
+            float midY = (topY + botY) * 0.5f;
+            float slack = (topY - botY) - DesignH;          // 설계 높이보다 남는 세로 길이
+            top.localPosition = new Vector3(0f, topY, 0f);
+            bottom.localPosition = new Vector3(0f, botY, 0f);
+            // 세로가 남으면 보드를 살짝 아래로 (엄지에 가깝게), 위아래 요소는 가장자리에 붙인다
+            middle.localPosition = new Vector3(0f, midY + Mathf.Clamp(slack * -0.15f, -1f, 0f), 0f);
+            overlayRoot.localPosition = new Vector3(0f, midY, 0f);
             background.transform.localScale = new Vector3(halfW * 2f / (4f / 4f) + 1f, size * 2f / (128f / 4f) + 0.1f, 1f);
         }
 
@@ -423,7 +448,7 @@ namespace BlockAtelier.Game
 
         void Update()
         {
-            if (!Mathf.Approximately(cam.aspect, lastAspect)) Layout(cam.aspect);
+            if (!Mathf.Approximately(cam.aspect, lastAspect) || Screen.safeArea != lastSafe) Layout(cam.aspect);
             if (game != null)
             {
                 board.Tick(game.Board);
@@ -1137,7 +1162,7 @@ namespace BlockAtelier.Game
 
         // ---------------- 캡처 (개발용) ----------------
 
-        public void Capture(string path, int width = 1080, int height = 2340)
+        public void Capture(string path, int width = 1080, int height = 2340, bool markSafe = false)
         {
             var rt = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
             float aspect = width / (float)height;
@@ -1149,6 +1174,18 @@ namespace BlockAtelier.Game
             RenderTexture.active = rt;
             var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
             tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            if (markSafe)
+            {
+                // 가려지는 영역(노치·홈 표시줄)을 빨간 띠로 표시해서 겹치는 UI를 찾기 쉽게
+                var ins = SafeInsets();
+                int topPx = Mathf.RoundToInt(ins.x * height), botPx = Mathf.RoundToInt(ins.y * height);
+                var band = new Color(1f, 0.2f, 0.2f, 1f);
+                for (int y = 0; y < height; y++)
+                {
+                    if (y >= botPx && y < height - topPx) continue;
+                    for (int x = 0; x < width; x++) tex.SetPixel(x, y, Color.Lerp(tex.GetPixel(x, y), band, 0.45f));
+                }
+            }
             tex.Apply();
             RenderTexture.active = prev;
             cam.targetTexture = null;
@@ -1249,6 +1286,17 @@ namespace BlockAtelier.Game
                     case "wait":
                         yield return new WaitForSecondsRealtime(float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
                         break;
+                    case "shotdev":
+                    {
+                        // shotdev 이름 가로px 세로px 위안전px 아래안전px : 기기 화면 흉내 캡처
+                        int w = int.Parse(parts[2]), h = int.Parse(parts[3]);
+                        safeOverride = new Vector2(float.Parse(parts[4]) / h, float.Parse(parts[5]) / h);
+                        yield return new WaitForEndOfFrame();
+                        Capture(Path.Combine(LogsDir, "shots", parts[1] + ".jpg"), w, h, true);
+                        safeOverride = null;
+                        Layout(cam.aspect);
+                        break;
+                    }
                     case "shot":
                         yield return new WaitForEndOfFrame();
                         Capture(Path.Combine(LogsDir, "shots", parts[1] + ".jpg"));
