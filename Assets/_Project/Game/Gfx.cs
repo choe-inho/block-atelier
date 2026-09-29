@@ -8,7 +8,7 @@ namespace BlockAtelier.Game
     /// </summary>
     public static class Gfx
     {
-        static Sprite block, well, pixel, circle, soft, ring, panel, gradient, streak, sparkle, star, lockIcon;
+        static Sprite block, well, pixel, circle, soft, ring, panel, gradient, streak, sparkle, star, lockIcon, gear;
         static Material spriteMat, particleMat, trailMat;
         static Font font, fontBold;
 
@@ -30,6 +30,8 @@ namespace BlockAtelier.Game
         public static Sprite Star { get { return star != null ? star : (star = MakeStar(128)); } }
         /// <summary>자물쇠 아이콘 (잠긴 레벨)</summary>
         public static Sprite Lock { get { return lockIcon != null ? lockIcon : (lockIcon = MakeLock(96)); } }
+        /// <summary>톱니바퀴 아이콘 (설정)</summary>
+        public static Sprite Gear { get { return gear != null ? gear : (gear = MakeGear(96)); } }
         public static Sprite Sparkle { get { return sparkle != null ? sparkle : (sparkle = MakeSparkle(64)); } }
 
         public static Material SpriteMat
@@ -324,6 +326,31 @@ namespace BlockAtelier.Game
                             float d = Mathf.Sqrt(rx * rx + ry * ry);
                             bool shackle = ry >= -0.02f && d > 0.15f && d < 0.24f;
                             if ((body && !hole) || shackle) hit++;
+                        }
+                    px[y * size + x] = new Color(1, 1, 1, hit / (float)(ss * ss));
+                }
+            t.SetPixels32(px);
+            t.Apply();
+            return Sprite.Create(t, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        static Sprite MakeGear(int size)
+        {
+            var t = NewTex(size, size);
+            var px = new Color32[size * size];
+            const int ss = 4;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int hit = 0;
+                    for (int sy = 0; sy < ss; sy++)
+                        for (int sx = 0; sx < ss; sx++)
+                        {
+                            float u = ((x + (sx + 0.5f) / ss) / size - 0.5f) * 2f, v = ((y + (sy + 0.5f) / ss) / size - 0.5f) * 2f;
+                            float r = Mathf.Sqrt(u * u + v * v), a = Mathf.Atan2(v, u);
+                            // 톱니 8개: 각도에 따라 바깥 반지름이 0.72 ~ 0.92
+                            float tooth = Mathf.Cos(a * 8f) > 0.25f ? 0.92f : 0.72f;
+                            if (r <= tooth && r >= 0.3f) hit++;
                         }
                     px[y * size + x] = new Color(1, 1, 1, hit / (float)(ss * ss));
                 }

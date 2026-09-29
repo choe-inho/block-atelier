@@ -203,8 +203,12 @@ namespace BlockAtelier.Game
         }
 
         /// <summary>화면 전체가 잠깐 밝아진다 (큰 폭발)</summary>
+        /// <summary>설정의 '효과 줄이기': 화면 흔들림과 번쩍임을 끈다</summary>
+        public static bool ReduceMotion;
+
         public void ScreenFlash(Color c, float alpha, float dur)
         {
+            if (ReduceMotion) return;
             var sr = Gfx.MakeSprite("ScreenFlash", transform, Gfx.Pixel, c, 75);
             float h = cam.orthographicSize * 2f + 2f;
             sr.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 0f);
@@ -269,6 +273,7 @@ namespace BlockAtelier.Game
 
         public void Shake(float amp, float dur = 0.28f)
         {
+            if (ReduceMotion) return;
             if (amp > shakeAmp * (shakeTime / Mathf.Max(shakeDur, 0.001f)))
             {
                 shakeAmp = amp;

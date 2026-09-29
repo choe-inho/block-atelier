@@ -10,7 +10,7 @@
 | `Assets/_Project/Editor/Bridge` | Claude 자동화 다리: 컴파일·콘솔 로그, 명령 파일, 테스트 실행 |
 | `Assets/_Project/Core` | 게임 규칙 전체 (UnityEngine 의존 없음). `GameSession`이 한 판을 담당 |
 | `Assets/_Project/Core/Sim/AutoSolver.cs` | 자동 풀이 봇. 난이도 측정용, 나중에 힌트 기능에도 사용 |
-| `Assets/_Project/Tests` | 규칙 테스트 29개 (Unity Test Runner, EditMode) |
+| `Assets/_Project/Tests` | 규칙 테스트 34개 (Unity Test Runner, EditMode) |
 | `Assets/_Project/Resources/Levels` | 앨범 10개 × 10 = 레벨 100개 JSON |
 | `Assets/_Project/Art/Previews` | 앨범별 그림 미리보기 (칠한 모습 / 칠하기 전) |
 | `Tools/LevelTool` | 레벨 생성·밸런싱 도구 (봇으로 클리어율을 재서 블록 순서를 고름) |
@@ -26,7 +26,9 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 - 블록을 끌어 보드에 놓는다. 보관함에 끌어 넣으면 보관.
 - 줄을 지우면 페인트가 그림으로 날아간다. 같은 색 한 줄은 2배(붓질), 가로·세로 동시 제거는 십자 폭발.
-- 레벨 버튼: 앨범별 레벨 목록(< > 로 앨범 넘기기), 소리 켜기/끄기. 앞 레벨을 깨야 다음 레벨이 열린다.
+- 앱을 켜면 홈: 이어서 그릴 그림(그리던 판이 있으면 그대로 이어짐), 앨범 책장(잠금·진행·별), 마이페이지(닉네임, 대표 그림, 기록), 설정(소리, 효과 줄이기, 튜토리얼 다시 보기, 진행 초기화).
+- 게임 화면의 '홈' 버튼으로 돌아간다. 앨범을 누르면 그 앨범의 레벨 목록. 앞 레벨을 깨야 다음 레벨이 열린다.
+- 닉네임은 2~10자 한글·영문·숫자(Core/Profile.cs). 폰에서는 시스템 키보드, 에디터에서는 개발 명령 `nick 이름`.
 - 별: 레벨의 `stars.three` / `stars.two` 수 이하로 완성하면 별 3개 / 2개, 그 밖이나 이어하기를 쓰면 1개. 화면 오른쪽 위 별 게이지가 지금 수로 받을 별을 보여 준다.
 - 시간: 첫 블록을 놓은 순간부터, 조작할 수 있던 시간만 잰다 (연출·창·앱 전환 중엔 멈춤). 이어하기를 쓴 판은 시간 기록 제외.
 - 기록은 레벨마다 최고 별과 최단 시간만 `PlayerPrefs`의 `ba_progress`에 저장한다 (`Core/Progress.cs`, 서버 동기화 때 그대로 병합).
@@ -40,7 +42,7 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 `Logs/claude_cmd.txt`에 한 줄씩 쓰면 에디터가 실행한다: `refresh`, `play`, `stop`, `tests`, `projectsetup`, `ping`.
 플레이 중에는 `Logs/claude_game.txt`로 게임 명령을 보낸다:
-`level N`, `demo`, `demo off`, `speed X`, `wait 초`, `shot 이름`, `shots 이름 개수 간격`,
+`level N`, `home`, `mypage`, `settings`, `album N`, `press 버튼글자`, `nick 이름`, `demo`, `demo off`, `speed X`, `wait 초`, `shot 이름`, `shots 이름 개수 간격`,
 `place 슬롯 x y`, `fillrow y 색 빈칸`, `fillcol x 색 빈칸`, `give 모양 색 ...`, `until Won 초`, `state`, `reset`.
 캡처는 `Logs/shots/`에 1080x2340으로 저장된다.
 
@@ -48,7 +50,7 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 1. Unity Hub에서 2D 템플릿으로 새 프로젝트를 만든다 (Unity 6 LTS 권장).
 2. 이 폴더의 `Assets/_Project`를 새 프로젝트의 `Assets` 아래에 복사한다.
-3. `Window > General > Test Runner > EditMode > Run All`. 29개가 모두 통과해야 한다.
+3. `Window > General > Test Runner > EditMode > Run All`. 34개가 모두 통과해야 한다.
 
 레벨 불러오기 예시:
 
