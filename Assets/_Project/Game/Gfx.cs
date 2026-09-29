@@ -255,18 +255,43 @@ namespace BlockAtelier.Game
         }
 
         /// <summary>레벨 그림을 작은 텍스처 한 장으로 (레벨 목록 썸네일)</summary>
+        /// <summary>그림 픽셀 색: 명암 0 밝음, 1 기본, 2 어두움 (Tools/art/pixelart.py와 같은 공식)</summary>
+        public static Color Shade(Color c, int tone, Color line)
+        {
+            if (tone == 0) return Color.Lerp(c, Color.white, 0.32f);
+            if (tone == 2) return Color.Lerp(c, line, 0.3f);
+            return c;
+        }
+
+        /// <summary>안 칠한 픽셀: 명암은 살리고 캔버스 쪽으로 옅게</summary>
+        public static Color Silhouette(Color shaded, Color canvas)
+        {
+            return Color.Lerp(shaded, canvas, 0.7f);
+        }
+
         public static Sprite PictureSprite(Core.LevelData lv, bool colored)
         {
             int w = lv.PictureWidth, h = lv.PictureHeight;
             var t = NewTex(w, h);
             t.filterMode = FilterMode.Point;
             var px = new Color32[w * h];
+            var line = Hex(lv.LineColor);
+            var canvas = Hex("#EFE9DC");
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                 {
-                    int c = lv.PixelAt(x, y);
-                    Color col = c == 0 ? Color.clear : Hex(lv.Palette[c]);
-                    if (c != 0 && !colored) col = Color.Lerp(col, new Color(0.85f, 0.83f, 0.8f), 0.7f);
+                    Color col;
+                    if (lv.IsLine(x, y)) col = line;
+                    else
+                    {
+                        int c = lv.PixelAt(x, y);
+                        if (c == 0) col = Color.clear;
+                        else
+                        {
+                            col = Shade(Hex(lv.Palette[c]), lv.ShadeAt(x, y), line);
+                            if (!colored) col = Silhouette(col, canvas);
+                        }
+                    }
                     px[(h - 1 - y) * w + x] = col;
                 }
             t.SetPixels32(px);

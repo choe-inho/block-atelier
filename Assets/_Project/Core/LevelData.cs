@@ -46,9 +46,36 @@ namespace BlockAtelier.Core
         /// <summary>그림 픽셀. 행 단위 문자열, 문자 하나가 팔레트 인덱스(0~9).</summary>
         public List<string> Rows = new List<string>();
 
+        /// <summary>
+        /// 명암. rows와 같은 모양, 문자 '0' 밝음 / '1' 기본 / '2' 어두움. 비어 있으면 전부 기본.
+        /// 명암은 보기만 다르고 같은 색으로 칠한다 (게임 색 수는 늘지 않음).
+        /// </summary>
+        public List<string> Shades = new List<string>();
+
+        /// <summary>rows의 'L' 칸: 처음부터 그려진 윤곽선 (색칠 공부의 선). 칠할 필요 없음.</summary>
+        public string LineColor = "#2B2838";
+
+        /// <summary>페인트 한 방울이 칠하는 픽셀 수 (그림이 클수록 크게). 기본 1.</summary>
+        public int Brush = 1;
+
+        public string AlbumTitle = "";
+
         public List<Block> Sequence = new List<Block>();
 
-        public int PixelAt(int x, int y) { return Rows[y][x] - '0'; }
+        /// <summary>칠해야 할 색 인덱스. 빈칸과 윤곽선은 0.</summary>
+        public int PixelAt(int x, int y)
+        {
+            char ch = Rows[y][x];
+            return ch == 'L' ? 0 : ch - '0';
+        }
+
+        public bool IsLine(int x, int y) { return Rows[y][x] == 'L'; }
+
+        public int ShadeAt(int x, int y)
+        {
+            if (Shades.Count == 0) return 1;
+            return Shades[y][x] - '0';
+        }
 
         public int ColorCount { get { return Palette.Count - 1; } }
 
@@ -63,6 +90,8 @@ namespace BlockAtelier.Core
             lv.Difficulty = Str(root, "difficulty", "normal");
             lv.TargetClearRate = Num(root, "targetClearRate", 0.9);
             lv.GrayOnComplete = Bool(root, "grayOnComplete", true);
+            lv.Brush = Int(root, "brush", 1);
+            lv.AlbumTitle = Str(root, "albumTitle", "");
 
             object mech;
             if (root.TryGetValue("mechanics", out mech) && mech is List<object>)
@@ -75,6 +104,10 @@ namespace BlockAtelier.Core
             lv.PictureHeight = Int(pic, "h", 0);
             foreach (var c in (List<object>)pic["palette"]) lv.Palette.Add((string)c);
             foreach (var r in (List<object>)pic["rows"]) lv.Rows.Add((string)r);
+            object sh;
+            if (pic.TryGetValue("shades", out sh) && sh is List<object>)
+                foreach (var r in (List<object>)sh) lv.Shades.Add((string)r);
+            lv.LineColor = Str(pic, "lineColor", lv.LineColor);
 
             foreach (var o in (List<object>)root["sequence"])
             {
@@ -96,10 +129,13 @@ namespace BlockAtelier.Core
                 if (r.Length != PictureWidth) throw new FormatException("rows 길이가 w와 다름: " + r);
                 foreach (char ch in r)
                 {
+                    if (ch == 'L') continue;
                     int v = ch - '0';
                     if (v < 0 || v >= Palette.Count) throw new FormatException("팔레트에 없는 색 인덱스: " + ch);
                 }
             }
+            if (Shades.Count != 0 && Shades.Count != PictureHeight) throw new FormatException("shades 줄 수가 h와 다름");
+            if (Brush < 1) throw new FormatException("brush는 1 이상");
             if (Sequence.Count == 0) throw new FormatException("sequence가 비어 있음");
             foreach (var b in Sequence)
             {
@@ -121,6 +157,8 @@ namespace BlockAtelier.Core
                 { "difficulty", Difficulty },
                 { "targetClearRate", TargetClearRate },
                 { "grayOnComplete", GrayOnComplete },
+                { "brush", Brush },
+                { "albumTitle", AlbumTitle },
                 { "mechanics", Mechanics },
                 { "picture", new Dictionary<string, object>
                     {
@@ -129,6 +167,8 @@ namespace BlockAtelier.Core
                         { "h", PictureHeight },
                         { "palette", Palette },
                         { "rows", Rows },
+                        { "shades", Shades },
+                        { "lineColor", LineColor },
                     }
                 },
                 { "sequence", seq },

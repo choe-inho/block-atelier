@@ -16,7 +16,8 @@ namespace BlockAtelier.Core
     {
         public int FromCell;   // 보드 칸 인덱스
         public int Color;      // 칸 색 (만능이면 Cell.Wild)
-        public int Pixel;      // 칠해진 그림 픽셀 인덱스, 필요 없는 색이면 -1
+        public int Pixel;      // 칠해진 첫 픽셀 인덱스, 필요 없는 색이면 -1
+        public List<int> Pixels; // 이 방울이 칠한 픽셀 전부 (붓 크기만큼)
     }
 
     /// <summary>한 수의 결과. 뷰는 이 순서대로 연출만 하면 된다.</summary>
@@ -40,6 +41,12 @@ namespace BlockAtelier.Core
         public int LinesCleared { get { return ClearedRows.Count + ClearedCols.Count; } }
 
         public int PixelsPainted
+        {
+            get { int n = 0; foreach (var p in Paints) if (p.Pixel >= 0) n += p.Pixels.Count; return n; }
+        }
+
+        /// <summary>그림에 닿은 방울 수 (버려진 방울 제외)</summary>
+        public int DropsLanded
         {
             get { int n = 0; foreach (var p in Paints) if (p.Pixel >= 0) n++; return n; }
         }
@@ -281,7 +288,11 @@ namespace BlockAtelier.Core
             {
                 if (c.Color == Cell.Gray) continue;
                 for (int k = 0; k < c.Multiplier; k++)
-                    r.Paints.Add(new PaintEvent { FromCell = c.Index, Color = c.Color, Pixel = Picture.ApplyPaint(c.Color) });
+                {
+                    var px = new List<int>(Picture.Brush);
+                    Picture.ApplyPaint(c.Color, px);
+                    r.Paints.Add(new PaintEvent { FromCell = c.Index, Color = c.Color, Pixel = px.Count > 0 ? px[0] : -1, Pixels = px });
+                }
             }
 
             foreach (var c in r.Cleared) Board.Set(c.Index, Cell.Empty);

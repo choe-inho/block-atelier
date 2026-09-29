@@ -11,6 +11,7 @@ namespace BlockAtelier.Core
         public readonly int Width;
         public readonly int Height;
         public readonly int ColorCount;
+        public readonly int Brush;
 
         readonly int[] target;          // 픽셀별 목표 색 (0 = 칠할 필요 없음)
         readonly bool[] painted;
@@ -23,6 +24,7 @@ namespace BlockAtelier.Core
             Width = level.PictureWidth;
             Height = level.PictureHeight;
             ColorCount = level.ColorCount;
+            Brush = level.Brush < 1 ? 1 : level.Brush;
             target = new int[Width * Height];
             painted = new bool[Width * Height];
             order = new List<int>[ColorCount + 1];
@@ -49,6 +51,7 @@ namespace BlockAtelier.Core
             Width = o.Width;
             Height = o.Height;
             ColorCount = o.ColorCount;
+            Brush = o.Brush;
             target = o.target;       // 불변이라 공유
             order = o.order;         // 불변이라 공유
             total = o.total;
@@ -99,6 +102,23 @@ namespace BlockAtelier.Core
         /// <summary>
         /// 페인트 한 방울을 떨어뜨린다. 칠해진 픽셀 인덱스(y*Width+x)를, 필요 없는 색이면 -1을 돌려준다.
         /// </summary>
+        /// <summary>
+        /// 페인트 한 방울 = 최대 Brush개 픽셀. 칠한 픽셀을 painted에 넣고 개수를 돌려준다.
+        /// </summary>
+        public int ApplyPaint(int color, List<int> painted)
+        {
+            if (color == Cell.Wild) color = MostNeededColor();
+            int n = 0;
+            while (n < Brush && NeedsColor(color))
+            {
+                int idx = order[color][nextInOrder[color]++];
+                this.painted[idx] = true;
+                if (painted != null) painted.Add(idx);
+                n++;
+            }
+            return n;
+        }
+
         public int ApplyPaint(int color)
         {
             if (color == Cell.Wild) color = MostNeededColor();

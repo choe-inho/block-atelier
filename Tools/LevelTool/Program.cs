@@ -19,22 +19,47 @@ static class LevelTool
         public string Tier;        // 블록 모양 묶음
         public bool Gray;
         public double MinFactor, MaxFactor;
+        public double TargetDrops;
     }
 
-    // 기획서 8장 난이도 곡선: 1~5 실패 불가, 6~10은 쉬움-보통-보통-쉬움-어려움 리듬.
-    static readonly Plan[] Plans =
+    // 난이도 곡선 (기획서 8장): 1~5는 실패 불가, 이후 5레벨마다 쉬움-보통-보통-쉬움-어려움 리듬.
+    // 뒤로 갈수록 목표 클리어율이 조금씩 내려가고, 21레벨부터 다 칠한 색은 회색이 된다.
+    static Plan[] Plans = MakePlans();
+
+    static Plan[] MakePlans()
     {
-        new Plan { Id = 1,  Difficulty = "easy",   Target = 1.00, Tier = "easy",   MinFactor = 2.4, MaxFactor = 3.4 },
-        new Plan { Id = 2,  Difficulty = "easy",   Target = 1.00, Tier = "easy",   MinFactor = 2.2, MaxFactor = 3.2 },
-        new Plan { Id = 3,  Difficulty = "easy",   Target = 1.00, Tier = "easy",   MinFactor = 2.2, MaxFactor = 3.2 },
-        new Plan { Id = 4,  Difficulty = "easy",   Target = 1.00, Tier = "easy",   MinFactor = 2.0, MaxFactor = 3.0 },
-        new Plan { Id = 5,  Difficulty = "easy",   Target = 1.00, Tier = "easy",   MinFactor = 2.0, MaxFactor = 3.0 },
-        new Plan { Id = 6,  Difficulty = "easy",   Target = 0.95, Tier = "normal", MinFactor = 1.6, MaxFactor = 3.2 },
-        new Plan { Id = 7,  Difficulty = "normal", Target = 0.85, Tier = "normal", MinFactor = 1.3, MaxFactor = 3.0 },
-        new Plan { Id = 8,  Difficulty = "normal", Target = 0.85, Tier = "normal", MinFactor = 1.3, MaxFactor = 3.0 },
-        new Plan { Id = 9,  Difficulty = "easy",   Target = 0.95, Tier = "normal", MinFactor = 1.6, MaxFactor = 3.2 },
-        new Plan { Id = 10, Difficulty = "hard",   Target = 0.40, Tier = "hard",   MinFactor = 1.0, MaxFactor = 2.2 },
-    };
+        var list = new List<Plan>();
+        for (int id = 1; id <= 100; id++)
+        {
+            double t = (id - 1) / 99.0;   // 0 → 1
+            var p = new Plan { Id = id, Gray = id > 20 };
+            if (id <= 5)
+            {
+                p.Difficulty = "easy"; p.Target = 1.0; p.Tier = "easy"; p.MinFactor = 2.0; p.MaxFactor = 3.2;
+            }
+            else
+            {
+                int slot = (id - 1) % 5;   // 0 쉬움, 1 보통, 2 보통, 3 쉬움, 4 어려움
+                if (slot == 4)
+                {
+                    p.Difficulty = "hard"; p.Target = 0.45 - 0.10 * t; p.Tier = "hard"; p.MinFactor = 0.7; p.MaxFactor = 3.0;
+                }
+                else if (slot == 0 || slot == 3)
+                {
+                    p.Difficulty = "easy"; p.Target = 0.95 - 0.10 * t; p.Tier = id <= 30 ? "easy" : "normal"; p.MinFactor = 1.4; p.MaxFactor = 4.2;
+                }
+                else
+                {
+                    p.Difficulty = "normal"; p.Target = 0.85 - 0.20 * t; p.Tier = "normal"; p.MinFactor = 1.0; p.MaxFactor = 3.6;
+                }
+            }
+            p.Target = Math.Round(p.Target, 2);
+            // 필요한 방울 수: 초반 45 → 후반 110. 붓 크기 = 픽셀 수 / 목표 방울 (올림)
+            p.TargetDrops = 45 + 65 * t;
+            list.Add(p);
+        }
+        return list.ToArray();
+    }
 
     sealed class Candidate
     {
@@ -47,18 +72,22 @@ static class LevelTool
 
     static int Main(string[] args)
     {
+        Console.OutputEncoding = new UTF8Encoding(false);
         string picturesPath = args.Length > 0 ? args[0] : "pictures.json";
         string outDir = args.Length > 1 ? args[1] : "Levels";
         int searchRuns = args.Length > 2 ? int.Parse(args[2]) : 40;
         int confirmRuns = args.Length > 3 ? int.Parse(args[3]) : 200;
+        int from = args.Length > 4 ? int.Parse(args[4]) : 1;
+        int to = args.Length > 5 ? int.Parse(args[5]) : Plans.Length;
         Directory.CreateDirectory(outDir);
 
         var pics = (List<object>)MiniJson.Parse(File.ReadAllText(picturesPath, Encoding.UTF8));
         var report = new StringBuilder();
-        report.AppendLine("level\tpicture\tcolors\tpixels\tblocks\tfactor\ttarget\tclearRate\tgreedyWin\tavgMoves");
+        report.AppendLine("level\tpicture\tcolors\tpixels\tbrush\tblocks\tfactor\ttarget\tclearRate\tgreedyWin\tavgMoves");
 
         foreach (var plan in Plans)
         {
+            if (plan.Id < from || plan.Id > to) continue;
             var pic = (Dictionary<string, object>)pics[plan.Id - 1];
             var candidates = new List<Candidate>();
 
@@ -66,7 +95,7 @@ static class LevelTool
             for (int step = 0; step <= 8; step++)
             {
                 double factor = plan.MinFactor + (plan.MaxFactor - plan.MinFactor) * step / 8.0;
-                for (int seed = 0; seed < 4; seed++)
+                for (int seed = 0; seed < 3; seed++)
                 {
                     var lv = Build(plan, pic, factor, plan.Id * 1000 + step * 10 + seed);
                     if (!GreedyWins(lv)) continue;   // 최선으로 두면 반드시 깰 수 있어야 한다
@@ -82,7 +111,7 @@ static class LevelTool
             candidates.Sort((a, b) => a.Err != b.Err ? a.Err.CompareTo(b.Err) : a.Factor.CompareTo(b.Factor));
             LevelData best = null;
             double bestErr = double.MaxValue, finalRate = 0, avgMoves = 0, bestFactor = 0;
-            for (int i = 0; i < Math.Min(6, candidates.Count); i++)
+            for (int i = 0; i < Math.Min(4, candidates.Count); i++)
             {
                 var c = candidates[i];
                 double moves;
@@ -99,14 +128,14 @@ static class LevelTool
 
             var gp = new GameSession(best).Picture;
             string line = string.Format(CultureInfo.InvariantCulture,
-                "{0}\t{1}\t{2}\t{3}\t{4}\t{5:0.00}\t{6:0.00}\t{7:0.00}\t{8}\t{9:0.0}",
+                "{0}\t{1}\t{2}\t{3}\t{10}\t{4}\t{5:0.00}\t{6:0.00}\t{7:0.00}\t{8}\t{9:0.0}",
                 plan.Id, best.PictureName, best.ColorCount, gp.TotalPixels, best.Sequence.Count,
-                bestFactor, plan.Target, finalRate, GreedyWins(best) ? "yes" : "no", avgMoves);
+                bestFactor, plan.Target, finalRate, GreedyWins(best) ? "yes" : "no", avgMoves, best.Brush);
             report.AppendLine(line);
             Console.WriteLine(line);
         }
 
-        File.WriteAllText(Path.Combine(outDir, "balance_report.tsv"), report.ToString(), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(outDir, "balance_report_" + from + "_" + to + ".tsv"), report.ToString(), new UTF8Encoding(false));
         return 0;
     }
 
@@ -120,7 +149,8 @@ static class LevelTool
         var lv = new LevelData
         {
             Id = plan.Id,
-            Album = "animals",
+            Album = (string)pic["album"],
+            AlbumTitle = (string)pic["albumTitle"],
             Difficulty = plan.Difficulty,
             TargetClearRate = plan.Target,
             GrayOnComplete = plan.Gray,
@@ -128,6 +158,8 @@ static class LevelTool
         };
         foreach (var c in (List<object>)pic["palette"]) lv.Palette.Add((string)c);
         foreach (var r in (List<object>)pic["rows"]) lv.Rows.Add((string)r);
+        foreach (var r in (List<object>)pic["shades"]) lv.Shades.Add((string)r);
+        lv.LineColor = (string)pic["lineColor"];
         lv.PictureHeight = lv.Rows.Count;
         lv.PictureWidth = lv.Rows[0].Length;
         if (plan.Tier == "hard") lv.Mechanics.Add("bigBlocks");
@@ -137,7 +169,11 @@ static class LevelTool
         double totalNeed = 0;
         foreach (var r in lv.Rows)
             foreach (char ch in r)
-                if (ch != '0') { need[ch - '0']++; totalNeed++; }
+                if (ch != '0' && ch != 'L') { need[ch - '0']++; totalNeed++; }
+        lv.Brush = Math.Max(1, (int)Math.Ceiling(totalNeed / plan.TargetDrops));
+        // 붓 크기만큼 방울이 덜 필요하다 (색마다 올림)
+        totalNeed = 0;
+        for (int c = 1; c <= colors; c++) { need[c] = Math.Ceiling(need[c] / lv.Brush); totalNeed += need[c]; }
 
         var rng = new Random(seed);
         var pool = ShapePool(plan.Tier);
@@ -215,6 +251,8 @@ static class LevelTool
         sb.Append("{\n");
         sb.AppendFormat(CultureInfo.InvariantCulture, "  \"id\": {0},\n", lv.Id);
         sb.AppendFormat("  \"album\": \"{0}\",\n", lv.Album);
+        sb.AppendFormat("  \"albumTitle\": \"{0}\",\n", lv.AlbumTitle);
+        sb.AppendFormat(CultureInfo.InvariantCulture, "  \"brush\": {0},\n", lv.Brush);
         sb.AppendFormat("  \"difficulty\": \"{0}\",\n", lv.Difficulty);
         sb.AppendFormat(CultureInfo.InvariantCulture, "  \"targetClearRate\": {0},\n", lv.TargetClearRate);
         sb.AppendFormat("  \"grayOnComplete\": {0},\n", lv.GrayOnComplete ? "true" : "false");
@@ -226,7 +264,13 @@ static class LevelTool
         sb.Append("    \"rows\": [\n");
         for (int i = 0; i < lv.Rows.Count; i++)
             sb.Append("      \"" + lv.Rows[i] + "\"" + (i < lv.Rows.Count - 1 ? "," : "") + "\n");
-        sb.Append("    ]\n  },\n");
+        sb.Append("    ],\n");
+        sb.Append("    \"shades\": [\n");
+        for (int i = 0; i < lv.Shades.Count; i++)
+            sb.Append("      \"" + lv.Shades[i] + "\"" + (i < lv.Shades.Count - 1 ? "," : "") + "\n");
+        sb.Append("    ],\n");
+        sb.AppendFormat("    \"lineColor\": \"{0}\"\n", lv.LineColor);
+        sb.Append("  },\n");
         sb.Append("  \"sequence\": [\n");
         for (int i = 0; i < lv.Sequence.Count; i++)
             sb.AppendFormat("    {{\"shape\": \"{0}\", \"color\": {1}}}{2}\n",

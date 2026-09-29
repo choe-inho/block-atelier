@@ -10,6 +10,8 @@ namespace BlockAtelier.Game
         public readonly Transform Root;
         public float PixelSize { get; private set; }
         SpriteRenderer[] pixels;
+        Color[] shaded;     // 픽셀마다 명암이 들어간 제 색
+        Color lineColor;
         SpriteRenderer frame, shine;
         LevelData level;
         Color[] palette;
@@ -38,13 +40,24 @@ namespace BlockAtelier.Game
             var edge = UI.Panel("CanvasEdge", Root, new Vector2(0f, -0.06f), new Vector2(w * PixelSize + pad * 2 + 0.08f, h * PixelSize + pad * 2 + 0.08f), UI.CanvasEdge, 5);
             edge.color = new Color(0f, 0f, 0f, 0.35f);
 
+            lineColor = Gfx.Hex(lv.LineColor);
             pixels = new SpriteRenderer[w * h];
+            shaded = new Color[w * h];
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                 {
                     int idx = y * w + x;
+                    if (lv.IsLine(x, y))
+                    {
+                        // 윤곽선은 처음부터 그려져 있다 (색칠 공부의 선)
+                        var ln = Gfx.MakeSprite("Ln", Root, Gfx.Pixel, lineColor, 7);
+                        ln.transform.localPosition = PixelLocal(idx);
+                        ln.transform.localScale = Vector3.one * PixelSize * 1.02f;
+                        continue;
+                    }
                     int c = lv.PixelAt(x, y);
                     if (c == 0) continue;
+                    shaded[idx] = Gfx.Shade(colors[c], lv.ShadeAt(x, y), lineColor);
                     var sr = Gfx.MakeSprite("Px", Root, Gfx.Pixel, Color.white, 7);
                     sr.transform.localPosition = PixelLocal(idx);
                     sr.transform.localScale = Vector3.one * PixelSize * 1.02f;
@@ -65,10 +78,7 @@ namespace BlockAtelier.Game
 
         public Bounds FrameBounds { get { return frame.bounds; } }
 
-        Color Silhouette(int c)
-        {
-            return Color.Lerp(palette[c], UI.Canvas, 0.68f);
-        }
+        public Color ColorOfPixel(int idx) { return shaded[idx]; }
 
         public void Render(PictureModel pic)
         {
@@ -76,9 +86,8 @@ namespace BlockAtelier.Game
             {
                 var sr = pixels[i];
                 if (sr == null) continue;
-                int c = pic.TargetAt(i % w, i / w);
                 bool on = pic.IsPaintedIndex(i) && !Pending.Contains(i);
-                sr.color = on ? palette[c] : Silhouette(c);
+                sr.color = on ? shaded[i] : Gfx.Silhouette(shaded[i], UI.Canvas);
                 sr.transform.localScale = Vector3.one * PixelSize * 1.02f;
                 sr.sortingOrder = 7;
             }
@@ -90,8 +99,7 @@ namespace BlockAtelier.Game
             Pending.Remove(idx);
             var sr = pixels[idx];
             if (sr == null) return;
-            int c = pic.TargetAt(idx % w, idx / w);
-            var target = palette[c];
+            var target = shaded[idx];
             var t = sr.transform;
             float baseScale = PixelSize * 1.02f;
             sr.sortingOrder = 8;
@@ -111,7 +119,7 @@ namespace BlockAtelier.Game
                 var sr = pixels[i];
                 if (sr == null) continue;
                 int y = i / w, x = i % w;
-                float delay = (x + y) * 0.035f;
+                float delay = (x + y) * 0.35f / Mathf.Max(1, w / 10f) * 0.1f;
                 var t = sr.transform;
                 var baseColor = sr.color;
                 float baseScale = PixelSize * 1.02f;
@@ -127,7 +135,7 @@ namespace BlockAtelier.Game
             Tween.Run(0.5f, k => root.localScale = start * (1f + 0.12f * Ease.Bump(k)), null, 0.35f);
             var sh = shine;
             Tween.Run(0.9f, k => sh.color = new Color(1f, 1f, 1f, 0.55f * Ease.Bump(k)), null, 0.2f);
-            return 0.35f + (w + h) * 0.035f;
+            return 0.35f + (w + h) * 0.35f / Mathf.Max(1, w / 10f) * 0.1f;
         }
     }
 }

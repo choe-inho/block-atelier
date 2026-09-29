@@ -215,6 +215,7 @@ namespace BlockAtelier.Game
             busy = false;
             combo = 0;
             levelIndex = Mathf.Clamp(index, 0, levels.Count - 1);
+            albumPage = -1;
             PlayerPrefs.SetInt("ba_level", levelIndex);
             var lv = levels[levelIndex];
             game = new GameSession(lv);
@@ -511,7 +512,7 @@ namespace BlockAtelier.Game
         IEnumerator PlayMove(MoveResult r, BlockSource src)
         {
             busy = true;
-            foreach (var p in r.Paints) if (p.Pixel >= 0) picture.Pending.Add(p.Pixel);
+            foreach (var p in r.Paints) if (p.Pixels != null) foreach (int q in p.Pixels) picture.Pending.Add(q);
 
             // 지우기 직전 모습: 지워질 칸은 원래 색으로 남겨 둔다
             var overrides = new Dictionary<int, int>();
@@ -645,10 +646,17 @@ namespace BlockAtelier.Game
                         float delay = k * 0.06f;
                         if (p.Pixel < 0) { fx.Fizzle(from, dc, delay); arrived++; continue; }
                         int px = p.Pixel;
+                        var more = p.Pixels;
                         var to = picture.PixelWorld(px);
                         fx.Drop(from, to, dc, delay, () =>
                         {
-                            picture.Reveal(px, game.Picture);
+                            // 붓 크기만큼 한 방울이 여러 픽셀을 칠한다: 닿은 곳부터 번지듯 차례로
+                            for (int m = 0; m < more.Count; m++)
+                            {
+                                int q = more[m];
+                                if (m == 0) picture.Reveal(q, game.Picture);
+                                else Tween.After(m * 0.035f, () => picture.Reveal(q, game.Picture));
+                            }
                             fx.Splash(to, dc);
                             PulsePicture();
                             Sfx.PlayNote(note++, 0.55f);
@@ -804,8 +812,7 @@ namespace BlockAtelier.Game
                 for (int i = 0; i < lv.PictureWidth * lv.PictureHeight; i++)
                 {
                     if (!game.Picture.IsPaintedIndex(i)) continue;
-                    int c = lv.PixelAt(i % lv.PictureWidth, i / lv.PictureWidth);
-                    var p = Gfx.MakeSprite("p", overlayRoot, Gfx.Pixel, palette[c], 84);
+                    var p = Gfx.MakeSprite("p", overlayRoot, Gfx.Pixel, picture.ColorOfPixel(i), 84);
                     p.transform.localPosition = new Vector3(((i % lv.PictureWidth) - (lv.PictureWidth - 1) * 0.5f) * ps, y + ((lv.PictureHeight - 1) * 0.5f - i / lv.PictureWidth) * ps, 0f);
                     p.transform.localScale = Vector3.one * ps * 1.02f;
                 }
@@ -821,7 +828,7 @@ namespace BlockAtelier.Game
                      new Vector2(0f, -0.9f), 0.38f, UI.Muted);
             bool hasNext = levelIndex < levels.Count - 1;
             if (hasNext) OverlayButton("다음 레벨", -2.6f, true, () => StartLevel(levelIndex + 1));
-            else UI.Label(overlayCanvas, "앨범 1의 그림을 모두 완성했어요", new Vector2(0f, -2.6f), 0.34f, UI.Ink);
+            else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -2.6f), 0.34f, UI.Ink);
             OverlayButton("레벨 목록", -4.0f, false, ShowLevels);
             busy = false;
         }
@@ -846,29 +853,52 @@ namespace BlockAtelier.Game
             OverlayButton("레벨 목록", -4.7f, false, ShowLevels);
         }
 
+        int albumPage = -1;
+
         void ShowLevels()
         {
             if (busy && game.State == GameState.Playing) return;
             CancelDrag();
+            int pages = Mathf.Max(1, (levels.Count + 9) / 10);
+            if (albumPage < 0 || albumPage >= pages) albumPage = Mathf.Clamp(levelIndex / 10, 0, pages - 1);
             OpenOverlay(15.2f);
-            UI.Label(overlayCanvas, "동물 친구들", new Vector2(0f, 6.7f), 0.7f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
-            UI.Label(overlayCanvas, "앨범 1 · 그림 " + cleared.Count + " / " + levels.Count, new Vector2(0f, 5.9f), 0.3f, UI.Muted);
-            for (int i = 0; i < levels.Count; i++)
+            int first = albumPage * 10, last = Mathf.Min(levels.Count, first + 10);
+            int done = 0;
+            for (int i = first; i < last; i++) if (cleared.Contains(levels[i].Id)) done++;
+            string title = levels[first].AlbumTitle;
+            if (string.IsNullOrEmpty(title)) title = "앨범 " + (albumPage + 1);
+            UI.Label(overlayCanvas, title, new Vector2(0f, 6.7f), 0.7f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
+            UI.Label(overlayCanvas, "앨범 " + (albumPage + 1) + " / " + pages + " · 완성 " + done + " / " + (last - first),
+                     new Vector2(0f, 5.9f), 0.3f, UI.Muted);
+            if (albumPage > 0)
             {
-                int col = i % 3, row = i / 3;
-                if (i == 9) col = 1;
+                var prev = new WorldButton(overlayRoot, overlayCanvas, "<", new Vector2(-3.9f, 6.35f), new Vector2(1.1f, 1.1f), false, 85);
+                prev.OnClick = () => { albumPage--; ShowLevels(); };
+                overlayButtons.Add(prev);
+            }
+            if (albumPage < pages - 1)
+            {
+                var next = new WorldButton(overlayRoot, overlayCanvas, ">", new Vector2(3.9f, 6.35f), new Vector2(1.1f, 1.1f), false, 85);
+                next.OnClick = () => { albumPage++; ShowLevels(); };
+                overlayButtons.Add(next);
+            }
+            for (int i = first; i < last; i++)
+            {
+                int k = i - first;
+                int col = k % 3, row = k / 3;
+                if (k == 9) col = 1;
                 var pos = new Vector2(-2.6f + col * 2.6f, 4.4f - row * 2.55f);
                 var lv = levels[i];
-                bool done = cleared.Contains(lv.Id);
+                bool isDone = cleared.Contains(lv.Id);
                 int idx = i;
                 var b = new WorldButton(overlayRoot, overlayCanvas, "", pos, new Vector2(2.3f, 2.3f), false, 85);
                 b.Bg.color = i == levelIndex ? Gfx.Hex("#3A4170") : UI.Button;
                 b.OnClick = () => StartLevel(idx);
                 overlayButtons.Add(b);
-                var th = Gfx.MakeSprite("Thumb", overlayRoot, Gfx.PictureSprite(lv, done), Color.white, 87);
+                var th = Gfx.MakeSprite("Thumb", overlayRoot, Gfx.PictureSprite(lv, isDone), Color.white, 87);
                 th.transform.localPosition = new Vector3(pos.x, pos.y + 0.18f, 0f);
                 th.transform.localScale = Vector3.one * 1.45f;
-                var tb = UI.Panel("ThumbBg", overlayRoot, new Vector2(pos.x, pos.y + 0.18f), new Vector2(1.65f, 1.65f), UI.Canvas, 86);
+                UI.Panel("ThumbBg", overlayRoot, new Vector2(pos.x, pos.y + 0.18f), new Vector2(1.65f, 1.65f), UI.Canvas, 86);
                 UI.Label(overlayCanvas, lv.Id + (lv.Difficulty == "hard" ? " 어려움" : ""), new Vector2(pos.x, pos.y - 0.86f), 0.24f,
                          lv.Difficulty == "hard" ? UI.Hard : UI.Ink);
             }

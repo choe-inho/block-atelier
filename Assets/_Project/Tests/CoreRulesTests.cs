@@ -202,6 +202,34 @@ namespace BlockAtelier.Tests
         }
 
         [Test]
+        public void 붓_크기만큼_한_방울이_여러_픽셀을_칠한다()
+        {
+            var lv = MakeLevel(Repeat("I4H", 1, 6));
+            lv.Brush = 3;
+            var g = new GameSession(lv);
+            g.TryPlace(C(0), 0, 0);
+            var r = g.TryPlace(C(0), 4, 0);          // 붓질 16방울 × 3 = 48, 색1은 20픽셀뿐
+            Assert.AreEqual(20, r.PixelsPainted);
+            Assert.AreEqual(7, r.DropsLanded);       // 3,3,3,3,3,3,2
+            Assert.AreEqual(3, r.Paints[0].Pixels.Count);
+            Assert.AreEqual(0, g.Picture.Remaining(1));
+        }
+
+        [Test]
+        public void 윤곽선_칸은_칠할_필요가_없고_명암은_JSON에_남는다()
+        {
+            var lv = MakeLevel(Repeat("I4H", 1, 3));
+            lv.Rows[0] = "L111L";
+            lv.Shades.AddRange(new[] { "01210", "11111", "11111", "11111", "22220" });
+            lv.Validate();
+            var back = LevelData.FromJson(lv.ToJson());
+            Assert.IsTrue(back.IsLine(0, 0));
+            Assert.AreEqual(0, back.PixelAt(0, 0));
+            Assert.AreEqual(2, back.ShadeAt(2, 0));
+            Assert.AreEqual(18, new GameSession(back).Picture.Total(1));
+        }
+
+        [Test]
         public void 가로와_세로를_함께_지우면_십자_폭발()
         {
             // 가로 0줄과 세로 0열을 같은 수에 완성시키고, (1,1)에 남은 칸이 폭발로 지워지는지 확인.

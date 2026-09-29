@@ -103,10 +103,10 @@ namespace BlockAtelier.Core.Sim
             double s = 0;
             if (r != null)
             {
-                s += 60 * r.PixelsPainted;
+                s += 60 * r.DropsLanded;
                 s += 15 * r.LinesCleared;
                 // 필요 없는 색을 지워 페인트를 버린 경우 약한 감점
-                s -= 4 * (r.Paints.Count - r.PixelsPainted);
+                s -= 4 * (r.Paints.Count - r.DropsLanded);
             }
 
             var board = g.Board;
