@@ -237,6 +237,7 @@ namespace BlockAtelier.Game
             overlayRoot.localPosition = new Vector3(0f, midY, 0f);
             background.transform.localScale = new Vector3(halfW * 2f / (4f / 4f) + 1f, size * 2f / (128f / 4f) + 0.1f, 1f);
             if (wide != wideLayout || !hudPlaced) ApplyHudLayout(wide);
+            FitOverlay();
         }
 
         bool hudPlaced;
@@ -996,18 +997,47 @@ namespace BlockAtelier.Game
             }
             for (int i = overlayCanvas.transform.childCount - 1; i >= 0; i--) Destroy(overlayCanvas.transform.GetChild(i).gameObject);
             overlayButtons.Clear();
+            openCardH = -1f;
+            overlayDim = null;
+            overlayRoot.localScale = Vector3.one;
         }
+
+        const float CardW = 8.6f;
+        float openCardH = -1f;       // 열려 있는 창의 높이 (화면이 바뀌면 다시 맞춘다)
+        SpriteRenderer overlayDim;
 
         Transform OpenOverlay(float cardH)
         {
             HideOverlay();
-            float size = cam.orthographicSize;
-            var dim = Gfx.MakeSprite("Dim", overlayRoot, Gfx.Pixel, UI.Dim, 80);
-            dim.transform.localScale = new Vector3(size * cam.aspect * 2f + 2f, size * 2f + 2f, 1f);
-            var card = UI.Panel("Card", overlayRoot, Vector2.zero, new Vector2(8.6f, cardH), Gfx.Hex("#242944"), 81);
+            openCardH = cardH;
+            overlayDim = Gfx.MakeSprite("Dim", overlayRoot, Gfx.Pixel, UI.Dim, 80);
+            var card = UI.Panel("Card", overlayRoot, Vector2.zero, new Vector2(CardW, cardH), Gfx.Hex("#242944"), 81);
+            FitOverlay();
             var ct = card.transform;
             Tween.Run(0.25f, k => ct.localScale = Vector3.one * Mathf.LerpUnclamped(0.85f, 1f, Ease.OutBack(k)));
             return overlayRoot;
+        }
+
+        /// <summary>
+        /// 창(카드)이 안전 영역보다 작도록 위아래·좌우 여백을 두고 통째로 줄인다.
+        /// 어두운 배경은 줄인 만큼 키워서 화면 전체를 덮는다.
+        /// </summary>
+        void FitOverlay()
+        {
+            if (openCardH <= 0f) { overlayRoot.localScale = Vector3.one; return; }
+            float size = cam.orthographicSize;
+            var ins = SafeInsets();
+            float safeH = 2f * size * (1f - ins.x - ins.y);
+            float safeW = 2f * size * cam.aspect;
+            float padV = Mathf.Max(0.7f, safeH * 0.04f), padH = Mathf.Max(0.5f, safeW * 0.04f);
+            float s = Mathf.Min(1f, (safeH - 2f * padV) / openCardH, (safeW - 2f * padH) / CardW);
+            overlayRoot.localScale = Vector3.one * s;
+            if (overlayDim != null)
+            {
+                // overlayRoot는 안전 영역 가운데에 있으니 화면 가운데로 되돌려 덮는다
+                overlayDim.transform.localPosition = new Vector3(0f, -overlayRoot.localPosition.y / s, 0f);
+                overlayDim.transform.localScale = new Vector3((size * cam.aspect * 2f + 2f) / s, (size * 2f + 2f) / s, 1f);
+            }
         }
 
         WorldButton OverlayButton(string text, float y, bool primary, System.Action onClick)
@@ -1245,8 +1275,8 @@ namespace BlockAtelier.Game
         {
             var rt = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
             float aspect = width / (float)height;
-            Layout(aspect);
             cam.aspect = aspect;
+            Layout(aspect);
             cam.targetTexture = rt;
             cam.Render();
             var prev = RenderTexture.active;
