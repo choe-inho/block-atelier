@@ -3,6 +3,7 @@
   "album": "animals",
   "albumTitle": "동물 친구들",
   "brush": 5,
+  "stars": {"three": 24, "two": 27},
   "difficulty": "easy",
   "targetClearRate": 1,
   "grayOnComplete": false,

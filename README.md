@@ -10,7 +10,7 @@
 | `Assets/_Project/Editor/Bridge` | Claude 자동화 다리: 컴파일·콘솔 로그, 명령 파일, 테스트 실행 |
 | `Assets/_Project/Core` | 게임 규칙 전체 (UnityEngine 의존 없음). `GameSession`이 한 판을 담당 |
 | `Assets/_Project/Core/Sim/AutoSolver.cs` | 자동 풀이 봇. 난이도 측정용, 나중에 힌트 기능에도 사용 |
-| `Assets/_Project/Tests` | 규칙 테스트 20개 (Unity Test Runner, EditMode) |
+| `Assets/_Project/Tests` | 규칙 테스트 29개 (Unity Test Runner, EditMode) |
 | `Assets/_Project/Resources/Levels` | 앨범 10개 × 10 = 레벨 100개 JSON |
 | `Assets/_Project/Art/Previews` | 앨범별 그림 미리보기 (칠한 모습 / 칠하기 전) |
 | `Tools/LevelTool` | 레벨 생성·밸런싱 도구 (봇으로 클리어율을 재서 블록 순서를 고름) |
@@ -26,7 +26,10 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 - 블록을 끌어 보드에 놓는다. 보관함에 끌어 넣으면 보관.
 - 줄을 지우면 페인트가 그림으로 날아간다. 같은 색 한 줄은 2배(붓질), 가로·세로 동시 제거는 십자 폭발.
-- 레벨 버튼: 앨범별 레벨 목록(< > 로 앨범 넘기기), 소리 켜기/끄기.
+- 레벨 버튼: 앨범별 레벨 목록(< > 로 앨범 넘기기), 소리 켜기/끄기. 앞 레벨을 깨야 다음 레벨이 열린다.
+- 별: 레벨의 `stars.three` / `stars.two` 수 이하로 완성하면 별 3개 / 2개, 그 밖이나 이어하기를 쓰면 1개. 화면 오른쪽 위 별 게이지가 지금 수로 받을 별을 보여 준다.
+- 시간: 첫 블록을 놓은 순간부터, 조작할 수 있던 시간만 잰다 (연출·창·앱 전환 중엔 멈춤). 이어하기를 쓴 판은 시간 기록 제외.
+- 기록은 레벨마다 최고 별과 최단 시간만 `PlayerPrefs`의 `ba_progress`에 저장한다 (`Core/Progress.cs`, 서버 동기화 때 그대로 병합).
 
 ## 이펙트 조절
 
@@ -45,7 +48,7 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 1. Unity Hub에서 2D 템플릿으로 새 프로젝트를 만든다 (Unity 6 LTS 권장).
 2. 이 폴더의 `Assets/_Project`를 새 프로젝트의 `Assets` 아래에 복사한다.
-3. `Window > General > Test Runner > EditMode > Run All`. 20개가 모두 통과해야 한다.
+3. `Window > General > Test Runner > EditMode > Run All`. 29개가 모두 통과해야 한다.
 
 레벨 불러오기 예시:
 
@@ -79,6 +82,17 @@ mono LevelTool.exe Tools/LevelTool/pictures.json Assets/_Project/Resources/Level
 
 인자: 그림 JSON, 출력 폴더, 탐색 횟수, 확인 횟수, 시작 레벨, 끝 레벨 (범위를 나눠 병렬 실행).
 그림 미리보기: `cd Tools/art && python3 sheet.py a01_animals a02_sea out.png`
+
+별 기준 보정 (레벨을 다시 만든 뒤 반드시 실행):
+
+```bash
+mcs -langversion:7.2 -optimize+ -out:StarTool.exe $(find Assets/_Project/Core -name '*.cs') Tools/LevelTool/StarTool.cs
+mono StarTool.exe Assets/_Project/Resources/Levels 200 1 50 &
+mono StarTool.exe Assets/_Project/Resources/Levels 200 51 100
+```
+
+사람 흉내 봇으로 깬 판의 수 분포를 재서, 별 3개 25% / 2개 이상 65% (1~10레벨은 45% / 85%)가 되도록 맞춘다.
+새 표본으로 검증해서 벗어나면 표본을 합쳐 다시 맞추기를 반복하고, 결과는 `Tools/LevelTool/star_report.tsv`.
 
 난이도 목표는 `Tools/LevelTool/Program.cs`의 `Plans` 표에서 바꾼다. 봇의 사람 흉내 정도(`HumanNoise`)는 실제 플레이 테스트 결과로 보정해야 한다.
 

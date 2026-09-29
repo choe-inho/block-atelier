@@ -21,9 +21,21 @@ namespace NUnit.Framework
                 : Equals(expected, actual);
             if (!eq) throw new AssertionException("기대 " + expected + ", 실제 " + actual + (msg == null ? "" : " — " + msg));
         }
+        public static void AreEqual(double expected, double actual, double delta)
+        {
+            if (Math.Abs(expected - actual) > delta) throw new AssertionException("기대 " + expected + "±" + delta + ", 실제 " + actual);
+        }
         public static void IsTrue(bool c, string msg = null) { if (!c) throw new AssertionException("참이어야 함 " + msg); }
         public static void IsFalse(bool c, string msg = null) { if (c) throw new AssertionException("거짓이어야 함 " + msg); }
         public static void IsNotNull(object o, string msg = null) { if (o == null) throw new AssertionException("null이면 안 됨 " + msg); }
+    }
+
+    public static class StringAssert
+    {
+        public static void Contains(string expected, string actual)
+        {
+            if (actual == null || !actual.Contains(expected)) throw new AssertionException("'" + actual + "'에 '" + expected + "' 없음");
+        }
     }
 
     public static class CollectionAssert

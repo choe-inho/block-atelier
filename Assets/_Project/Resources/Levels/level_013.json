@@ -3,6 +3,7 @@
   "album": "sea",
   "albumTitle": "바다 친구들",
   "brush": 5,
+  "stars": {"three": 16, "two": 18},
   "difficulty": "normal",
   "targetClearRate": 0.83,
   "grayOnComplete": false,

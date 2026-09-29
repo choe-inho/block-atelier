@@ -8,7 +8,7 @@ namespace BlockAtelier.Game
     /// </summary>
     public static class Gfx
     {
-        static Sprite block, well, pixel, circle, soft, ring, panel, gradient, streak, sparkle;
+        static Sprite block, well, pixel, circle, soft, ring, panel, gradient, streak, sparkle, star, lockIcon;
         static Material spriteMat, particleMat, trailMat;
         static Font font, fontBold;
 
@@ -26,6 +26,10 @@ namespace BlockAtelier.Game
         public static Sprite Gradient { get { return gradient != null ? gradient : (gradient = MakeGradient()); } }
         /// <summary>붓질 연출용 가로로 긴 빛줄기</summary>
         public static Sprite Streak { get { return streak != null ? streak : (streak = MakeStreak()); } }
+        /// <summary>둥근 모서리 별 (평가 별)</summary>
+        public static Sprite Star { get { return star != null ? star : (star = MakeStar(128)); } }
+        /// <summary>자물쇠 아이콘 (잠긴 레벨)</summary>
+        public static Sprite Lock { get { return lockIcon != null ? lockIcon : (lockIcon = MakeLock(96)); } }
         public static Sprite Sparkle { get { return sparkle != null ? sparkle : (sparkle = MakeSparkle(64)); } }
 
         public static Material SpriteMat
@@ -246,6 +250,86 @@ namespace BlockAtelier.Game
             t.SetPixels32(px);
             t.Apply();
             return Sprite.Create(t, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), h);
+        }
+
+        static Vector2[] starPts;
+
+        static bool InStar(float x, float y)
+        {
+            // 중심 (0,0), 바깥 반지름 1, 안쪽 0.5인 다섯 꼭지 별 (곧은 변)
+            if (starPts == null)
+            {
+                starPts = new Vector2[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    float a = Mathf.PI / 2f + i * Mathf.PI / 5f;
+                    float r = i % 2 == 0 ? 1f : 0.5f;
+                    starPts[i] = new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r);
+                }
+            }
+            bool inside = false;
+            for (int i = 0, j = 9; i < 10; j = i++)
+            {
+                var a = starPts[i]; var b = starPts[j];
+                if ((a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+            }
+            return inside;
+        }
+
+        static Sprite MakeStar(int size)
+        {
+            var t = NewTex(size, size);
+            var px = new Color32[size * size];
+            const int ss = 4;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int hit = 0;
+                    float shade = 0f;
+                    for (int sy = 0; sy < ss; sy++)
+                        for (int sx = 0; sx < ss; sx++)
+                        {
+                            float u = ((x + (sx + 0.5f) / ss) / size - 0.5f) * 2.15f;
+                            float v = ((y + (sy + 0.5f) / ss) / size - 0.46f) * 2.15f;
+                            if (InStar(u, v)) { hit++; shade += v > 0.1f ? 1f : 0.82f; }
+                        }
+                    float a = hit / (float)(ss * ss);
+                    float g = hit == 0 ? 1f : shade / hit;   // 위쪽 절반을 살짝 밝게
+                    px[y * size + x] = new Color(g, g, g, a);
+                }
+            t.SetPixels32(px);
+            t.Apply();
+            return Sprite.Create(t, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        static Sprite MakeLock(int size)
+        {
+            var t = NewTex(size, size);
+            var px = new Color32[size * size];
+            const int ss = 4;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    int hit = 0;
+                    for (int sy = 0; sy < ss; sy++)
+                        for (int sx = 0; sx < ss; sx++)
+                        {
+                            float u = (x + (sx + 0.5f) / ss) / size, v = (y + (sy + 0.5f) / ss) / size;
+                            // 몸통: 둥근 사각형, 열쇠 구멍은 비움
+                            bool body = u > 0.18f && u < 0.82f && v > 0.08f && v < 0.56f;
+                            float kx = u - 0.5f, ky = v - 0.36f;
+                            bool hole = (kx * kx + ky * ky < 0.0045f) || (Mathf.Abs(kx) < 0.028f && v > 0.2f && v < 0.36f);
+                            // 고리: 위쪽 반원 띠
+                            float rx = u - 0.5f, ry = v - 0.56f;
+                            float d = Mathf.Sqrt(rx * rx + ry * ry);
+                            bool shackle = ry >= -0.02f && d > 0.15f && d < 0.24f;
+                            if ((body && !hole) || shackle) hit++;
+                        }
+                    px[y * size + x] = new Color(1, 1, 1, hit / (float)(ss * ss));
+                }
+            t.SetPixels32(px);
+            t.Apply();
+            return Sprite.Create(t, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
         }
 
         static Sprite MakeSparkle(int size)

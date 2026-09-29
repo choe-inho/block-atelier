@@ -3,6 +3,7 @@
   "album": "fruit",
   "albumTitle": "과일 바구니",
   "brush": 4,
+  "stars": {"three": 23, "two": 27},
   "difficulty": "normal",
   "targetClearRate": 0.81,
   "grayOnComplete": true,

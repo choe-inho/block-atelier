@@ -3,6 +3,7 @@
   "album": "space",
   "albumTitle": "우주와 판타지",
   "brush": 2,
+  "stars": {"three": 41, "two": 44},
   "difficulty": "easy",
   "targetClearRate": 0.86,
   "grayOnComplete": true,

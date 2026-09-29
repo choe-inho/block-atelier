@@ -3,6 +3,7 @@
   "album": "vehicles",
   "albumTitle": "부릉부릉 탈것",
   "brush": 3,
+  "stars": {"three": 34, "two": 36},
   "difficulty": "normal",
   "targetClearRate": 0.74,
   "grayOnComplete": true,

@@ -60,6 +60,9 @@ namespace BlockAtelier.Core
 
         public string AlbumTitle = "";
 
+        /// <summary>별 기준: 이 수 이하로 완성하면 별 3개 / 2개. 0이면 기준 없음(완성하면 별 3개).</summary>
+        public int Star3Moves, Star2Moves;
+
         public List<Block> Sequence = new List<Block>();
 
         /// <summary>칠해야 할 색 인덱스. 빈칸과 윤곽선은 0.</summary>
@@ -92,6 +95,13 @@ namespace BlockAtelier.Core
             lv.GrayOnComplete = Bool(root, "grayOnComplete", true);
             lv.Brush = Int(root, "brush", 1);
             lv.AlbumTitle = Str(root, "albumTitle", "");
+            object st;
+            if (root.TryGetValue("stars", out st) && st is Dictionary<string, object>)
+            {
+                var sd = (Dictionary<string, object>)st;
+                lv.Star3Moves = Int(sd, "three", 0);
+                lv.Star2Moves = Int(sd, "two", 0);
+            }
 
             object mech;
             if (root.TryGetValue("mechanics", out mech) && mech is List<object>)
@@ -136,6 +146,8 @@ namespace BlockAtelier.Core
             }
             if (Shades.Count != 0 && Shades.Count != PictureHeight) throw new FormatException("shades 줄 수가 h와 다름");
             if (Brush < 1) throw new FormatException("brush는 1 이상");
+            if (Star3Moves < 0 || Star2Moves < 0 || (Star3Moves > 0 && Star2Moves > 0 && Star2Moves < Star3Moves))
+                throw new FormatException("별 기준은 0 이상, two >= three");
             if (Sequence.Count == 0) throw new FormatException("sequence가 비어 있음");
             foreach (var b in Sequence)
             {
@@ -159,6 +171,7 @@ namespace BlockAtelier.Core
                 { "grayOnComplete", GrayOnComplete },
                 { "brush", Brush },
                 { "albumTitle", AlbumTitle },
+                { "stars", new Dictionary<string, object> { { "three", Star3Moves }, { "two", Star2Moves } } },
                 { "mechanics", Mechanics },
                 { "picture", new Dictionary<string, object>
                     {

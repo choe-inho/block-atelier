@@ -3,6 +3,7 @@
   "album": "plants",
   "albumTitle": "꽃과 식물",
   "brush": 3,
+  "stars": {"three": 25, "two": 28},
   "difficulty": "normal",
   "targetClearRate": 0.76,
   "grayOnComplete": true,

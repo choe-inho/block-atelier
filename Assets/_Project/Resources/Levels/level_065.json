@@ -3,6 +3,7 @@
   "album": "sky",
   "albumTitle": "하늘과 날씨",
   "brush": 2,
+  "stars": {"three": 30, "two": 34},
   "difficulty": "hard",
   "targetClearRate": 0.39,
   "grayOnComplete": true,

@@ -3,6 +3,7 @@
   "album": "dessert",
   "albumTitle": "달콤한 간식",
   "brush": 5,
+  "stars": {"three": 23, "two": 26},
   "difficulty": "normal",
   "targetClearRate": 0.79,
   "grayOnComplete": true,

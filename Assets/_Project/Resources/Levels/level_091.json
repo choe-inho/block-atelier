@@ -3,6 +3,7 @@
   "album": "korea",
   "albumTitle": "한국의 멋",
   "brush": 3,
+  "stars": {"three": 28, "two": 31},
   "difficulty": "easy",
   "targetClearRate": 0.86,
   "grayOnComplete": true,

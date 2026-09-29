@@ -49,7 +49,15 @@ namespace BlockAtelier.Game
         int undoLeft;
         int combo;
         bool busy;
-        HashSet<int> cleared = new HashSet<int>();
+        Progress progress = new Progress();
+        readonly PlayClock clock = new PlayClock();
+        readonly SpriteRenderer[] hudStars = new SpriteRenderer[3];
+        Text starHint;
+        int shownStars = 3;
+        readonly bool[] starAnimating = new bool[3];
+        long shownSecond = -1;
+        static readonly Color StarOn = Gfx.Hex("#FFD166");
+        static readonly Color StarOff = new Color(1f, 1f, 1f, 0.13f);
         float lastAspect = -1f;
 
         // 끌어서 놓기
@@ -110,6 +118,15 @@ namespace BlockAtelier.Game
             pctLabel = UI.Label(topCanvas, "그림 완성도", new Vector2(2.95f, -3.35f), 0.24f, UI.Muted, TextAnchor.MiddleCenter, 3.5f);
             chipRoot = new GameObject("Chips").transform;
             chipRoot.SetParent(top, false);
+            // 별 게이지: 지금 수로 끝내면 받을 별. 기준을 넘기면 하나씩 꺼진다.
+            for (int i = 0; i < 3; i++)
+            {
+                var st = Gfx.MakeSprite("HudStar", top, Gfx.Star, StarOn, 42);
+                st.transform.localPosition = new Vector3(2.35f + i * 0.6f, -1.45f, 0f);
+                st.transform.localScale = Vector3.one * 0.52f;
+                hudStars[i] = st;
+            }
+            starHint = UI.Label(topCanvas, "", new Vector2(2.95f, -5.2f), 0.22f, UI.Muted, TextAnchor.MiddleCenter, 3.8f);
 
             undoBtn = new WorldButton(bottom, bottomCanvas, "되돌리기", new Vector2(-3.25f, 0.85f), new Vector2(3.0f, 0.95f), false, 45);
             restartBtn = new WorldButton(bottom, bottomCanvas, "처음부터", new Vector2(0f, 0.85f), new Vector2(3.0f, 0.95f), false, 45);
@@ -125,7 +142,7 @@ namespace BlockAtelier.Game
             LoadProgress();
             Sfx.Muted = PlayerPrefs.GetInt("ba_mute", 0) == 1;
             Layout(cam.aspect);
-            StartLevel(Mathf.Clamp(PlayerPrefs.GetInt("ba_level", 0), 0, levels.Count - 1));
+            StartLevel(ResumeIndex());
         }
 
         /// <summary>빛 번짐(블룸)과 가장자리 어둡게. 흰색 이상 밝은 것만 번진다.</summary>
@@ -186,22 +203,41 @@ namespace BlockAtelier.Game
             }
         }
 
+        const string ProgressKey = "ba_progress";
+
         void LoadProgress()
         {
-            cleared.Clear();
-            var s = PlayerPrefs.GetString("ba_cleared", "");
-            foreach (var p in s.Split(','))
+            progress = Progress.FromJson(PlayerPrefs.GetString(ProgressKey, ""));
+            // 예전 저장 형식(깬 레벨 번호 목록)은 별 1개로 옮긴다
+            var old = PlayerPrefs.GetString("ba_cleared", "");
+            if (old.Length > 0)
             {
-                int id;
-                if (int.TryParse(p, out id)) cleared.Add(id);
+                foreach (var p in old.Split(','))
+                {
+                    int id;
+                    if (int.TryParse(p, out id) && !progress.Get(id).Cleared)
+                        progress.Set(id, new LevelRecord { Stars = 1, BestTimeMs = -1 });
+                }
+                PlayerPrefs.DeleteKey("ba_cleared");
+                SaveProgress();
             }
         }
 
         void SaveProgress()
         {
-            PlayerPrefs.SetString("ba_cleared", string.Join(",", cleared));
+            PlayerPrefs.SetString(ProgressKey, progress.ToJson());
             PlayerPrefs.SetInt("ba_level", levelIndex);
             PlayerPrefs.Save();
+        }
+
+        bool IsUnlocked(int index) { return index >= 0 && index < levels.Count && progress.IsUnlocked(levels[index].Id); }
+
+        /// <summary>이어서 할 레벨: 저장된 위치가 잠겨 있으면 열린 것 중 가장 앞</summary>
+        int ResumeIndex()
+        {
+            int saved = Mathf.Clamp(PlayerPrefs.GetInt("ba_level", 0), 0, levels.Count - 1);
+            if (IsUnlocked(saved)) return saved;
+            return Mathf.Clamp(progress.FrontierLevel(levels.Count) - 1, 0, levels.Count - 1);
         }
 
         void StartLevel(int index)
@@ -220,6 +256,16 @@ namespace BlockAtelier.Game
             var lv = levels[levelIndex];
             game = new GameSession(lv);
             undoLeft = 3;
+            clock.Reset();
+            shownSecond = -1;
+            shownStars = 3;
+            for (int i = 0; i < 3; i++)
+            {
+                starAnimating[i] = false;
+                hudStars[i].color = StarOn;
+                hudStars[i].transform.localScale = Vector3.one * 0.52f;
+                hudStars[i].transform.localRotation = Quaternion.identity;
+            }
 
             palette = new Color[lv.Palette.Count];
             for (int i = 0; i < palette.Length; i++) palette[i] = Gfx.Hex(lv.Palette[i]);
@@ -233,7 +279,7 @@ namespace BlockAtelier.Game
             BuildChips();
             RenderAll();
             HideHand();
-            if (levelIndex == 0 && !cleared.Contains(lv.Id)) Tween.After(0.9f, ShowHand);
+            if (levelIndex == 0 && !progress.Get(lv.Id).Cleared) Tween.After(0.9f, ShowHand);
 
             // 등장 연출: 보드 칸이 대각선으로 톡톡
             for (int i = 0; i < 64; i++)
@@ -288,7 +334,8 @@ namespace BlockAtelier.Game
             int shownLeft = game.Picture.RemainingPixels + picture.Pending.Count;
             int pct = total == 0 ? 100 : Mathf.RoundToInt((1f - shownLeft / (float)total) * 100f);
             pctText.text = pct + "%";
-            movesText.text = game.MovesUsed + "수";
+            UpdateMovesText();
+            RenderStars();
             for (int c = 1; c <= game.Level.ColorCount; c++)
             {
                 var t = chipTexts[c - 1];
@@ -299,6 +346,69 @@ namespace BlockAtelier.Game
             }
             undoBtn.Label.text = "되돌리기 " + undoLeft;
             undoBtn.SetEnabled(!busy && undoLeft > 0 && game.CanUndo && game.State == GameState.Playing);
+        }
+
+        void UpdateMovesText()
+        {
+            shownSecond = clock.ElapsedMs / 1000;
+            movesText.text = game.MovesUsed + "수 · " + Scoring.FormatTime(clock.ElapsedMs);
+        }
+
+        /// <summary>별 게이지와 "별 3개까지 N수" 안내. 별을 잃는 순간 짧게 흔들고 꺼진다.</summary>
+        void RenderStars()
+        {
+            var lv = game.Level;
+            int atRisk;
+            int left = Scoring.MovesLeftForStars(lv, game.MovesUsed, game.ContinuesUsed, out atRisk);
+            int s = atRisk;
+            for (int i = 0; i < 3; i++)
+            {
+                var sr = hudStars[i];
+                var t = sr.transform;
+                bool on = i < s;
+                if (!on && i < shownStars)
+                {
+                    // 방금 잃은 별: 떨리며 줄어든 뒤 흐리게
+                    Sfx.Play(Sfx.Tick, 0.5f, 0.7f);
+                    int si = i;
+                    starAnimating[si] = true;
+                    Tween.Run(0.45f, k =>
+                    {
+                        t.localScale = Vector3.one * 0.52f * (1f + 0.35f * Ease.Bump(Mathf.Min(1f, k * 2f)) - 0.18f * k);
+                        t.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(k * 40f) * 14f * (1f - k));
+                        sr.color = Color.Lerp(StarOn, StarOff, k);
+                    }, () => { t.localRotation = Quaternion.identity; starAnimating[si] = false; });
+                }
+                else if (on && i >= shownStars)
+                {
+                    // 되돌리기로 되찾은 별
+                    int si = i;
+                    starAnimating[si] = true;
+                    Tween.Run(0.3f, k =>
+                    {
+                        t.localScale = Vector3.one * 0.52f * Mathf.LerpUnclamped(0.6f, 1f, Ease.OutBack(k));
+                        sr.color = Color.Lerp(StarOff, StarOn, k);
+                    }, () => starAnimating[si] = false);
+                }
+                else if (!starAnimating[i])
+                {
+                    sr.color = on ? StarOn : StarOff;
+                    t.localScale = Vector3.one * (on ? 0.52f : 0.43f);
+                }
+            }
+            shownStars = s;
+            if (game.ContinuesUsed > 0) starHint.text = "이어하기를 써서 별 1개";
+            else if (left < 0) starHint.text = "";
+            else if (left == 0) starHint.text = "다음 수부터 별 " + (s - 1) + "개";
+            else starHint.text = "별 " + s + "개까지 " + left + "수";
+            starHint.color = left >= 0 && left <= 2 ? UI.Hard : UI.Muted;
+        }
+
+        /// <summary>시간이 흐르는 조건: 플레이 중이고, 연출·창·앱 전환이 없을 때</summary>
+        bool ClockRunning()
+        {
+            return game != null && game.State == GameState.Playing && !busy
+                   && overlayRoot.childCount <= 1 && Application.isFocused;
         }
 
         void RenderAll()
@@ -314,7 +424,12 @@ namespace BlockAtelier.Game
         void Update()
         {
             if (!Mathf.Approximately(cam.aspect, lastAspect)) Layout(cam.aspect);
-            if (game != null) board.Tick(game.Board);
+            if (game != null)
+            {
+                board.Tick(game.Board);
+                clock.Tick(Time.unscaledDeltaTime, ClockRunning());
+                if (clock.ElapsedMs / 1000 != shownSecond) UpdateMovesText();
+            }
 #if UNITY_EDITOR
             PollDevCommands();
 #endif
@@ -511,6 +626,7 @@ namespace BlockAtelier.Game
 
         IEnumerator PlayMove(MoveResult r, BlockSource src)
         {
+            if (!clock.Started) clock.Start();   // 첫 블록을 놓은 순간부터 잰다
             busy = true;
             foreach (var p in r.Paints) if (p.Pixels != null) foreach (int q in p.Pixels) picture.Pending.Add(q);
 
@@ -728,7 +844,7 @@ namespace BlockAtelier.Game
         IEnumerator WinSequence()
         {
             busy = true;
-            cleared.Add(game.Level.Id);
+            var result = progress.Submit(game.Level, game.MovesUsed, game.ContinuesUsed, clock.ElapsedMs);
             SaveProgress();
             yield return new WaitForSeconds(0.25f);
             float d = picture.Celebrate();
@@ -738,7 +854,7 @@ namespace BlockAtelier.Game
             colors.Add(UI.Accent);
             fx.Confetti(new Vector3(0f, -cam.orthographicSize - 0.5f, 0f), colors.ToArray(), 90);
             yield return new WaitForSeconds(d + 0.5f);
-            ShowWin();
+            ShowWin(result);
         }
 
         IEnumerator LoseSequence()
@@ -819,17 +935,69 @@ namespace BlockAtelier.Game
             }
         }
 
-        void ShowWin()
+        void ShowWin(SubmitResult res)
         {
-            OpenOverlay(12.6f);
-            UI.Label(overlayCanvas, game.Level.PictureName + " 완성!", new Vector2(0f, 5.3f), 0.8f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
-            BigPicture(2.1f, 4.6f, true);
-            UI.Label(overlayCanvas, game.MovesUsed + "수  ·  되돌리기 " + (3 - undoLeft) + "  ·  이어하기 " + game.ContinuesUsed,
-                     new Vector2(0f, -0.9f), 0.38f, UI.Muted);
+            var lv = game.Level;
+            OpenOverlay(13.6f);
+            UI.Label(overlayCanvas, lv.PictureName + " 완성!", new Vector2(0f, 5.75f), 0.78f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
+
+            // 별: 하나씩 튀어나오며 음이 올라간다. 못 받은 별은 흐리게 자리만.
+            for (int i = 0; i < 3; i++)
+            {
+                bool got = i < res.Stars;
+                float x = (i - 1) * 1.45f, y = i == 1 ? 4.55f : 4.3f;
+                var sr = Gfx.MakeSprite("WinStar", overlayRoot, Gfx.Star, got ? StarOn : StarOff, 86);
+                var t = sr.transform;
+                t.localPosition = new Vector3(x, y, 0f);
+                float size = i == 1 ? 1.35f : 1.1f;
+                if (!got) { t.localScale = Vector3.one * size * 0.92f; continue; }
+                t.localScale = Vector3.zero;
+                int note = i;
+                float delay = 0.35f + i * 0.3f;
+                Tween.Run(0.42f, k =>
+                {
+                    t.localScale = Vector3.one * size * Mathf.LerpUnclamped(0f, 1f, Ease.OutBack(k));
+                    t.localRotation = Quaternion.Euler(0f, 0f, (1f - k) * -70f);
+                }, null, delay);
+                Tween.After(delay + 0.08f, () =>
+                {
+                    Sfx.PlayNote(4 + note * 2, 0.8f);
+                    var glow = Gfx.MakeSprite("StarGlow", overlayRoot, Gfx.Sparkle, new Color(1f, 0.9f, 0.5f, 0.9f), 85);
+                    var gt = glow.transform;
+                    gt.localPosition = new Vector3(x, y, 0f);
+                    Tween.Run(0.5f, k =>
+                    {
+                        gt.localScale = Vector3.one * size * (1f + 1.6f * k);
+                        glow.color = new Color(1f, 0.9f, 0.5f, 0.9f * (1f - k));
+                    });
+                });
+            }
+
+            BigPicture(1.35f, 3.9f, true);
+
+            string time = res.TimeCounted ? Scoring.FormatTimePrecise(res.TimeMs) : "시간 기록 없음";
+            UI.Label(overlayCanvas, game.MovesUsed + "수  ·  " + time, new Vector2(0f, -1.35f), 0.42f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
+
+            string sub;
+            if (res.NewBestTime && !res.FirstClear) sub = "<color=#FFD166>최고 기록 경신!</color>  이전 " + Scoring.FormatTimePrecise(res.PrevBestMs);
+            else if (!res.TimeCounted) sub = "이어하기를 쓴 판은 시간이 기록되지 않아요";
+            else if (res.PrevBestMs >= 0 && !res.NewBestTime) sub = "최고 기록 " + Scoring.FormatTimePrecise(res.PrevBestMs);
+            else sub = "첫 기록!";
+            if (res.Stars < 3 && lv.Star3Moves > 0 && game.ContinuesUsed == 0) sub += "   ·   별 3개: " + lv.Star3Moves + "수 이하";
+            var subLabel = UI.Label(overlayCanvas, sub, new Vector2(0f, -1.95f), 0.26f, UI.Muted, TextAnchor.MiddleCenter, 8.2f);
+            subLabel.supportRichText = true;
+            if (res.NewBestTime && !res.FirstClear)
+            {
+                var st = subLabel.transform;
+                Tween.Run(0.5f, k => st.localScale = Vector3.one * (1f + 0.15f * Ease.Bump(k)), null, 1.3f);
+            }
+
             bool hasNext = levelIndex < levels.Count - 1;
-            if (hasNext) OverlayButton("다음 레벨", -2.6f, true, () => StartLevel(levelIndex + 1));
-            else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -2.6f), 0.34f, UI.Ink);
-            OverlayButton("레벨 목록", -4.0f, false, ShowLevels);
+            if (hasNext) OverlayButton("다음 레벨", -3.3f, true, () => StartLevel(levelIndex + 1));
+            else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -3.3f), 0.34f, UI.Ink);
+            OverlayButton(res.Stars < 3 ? "다시 해서 별 모으기" : "레벨 목록", -4.7f, false,
+                          res.Stars < 3 ? (System.Action)(() => StartLevel(levelIndex)) : ShowLevels);
+            if (res.Stars < 3) OverlayButton("레벨 목록", -6.0f, false, ShowLevels);
             busy = false;
         }
 
@@ -855,6 +1023,21 @@ namespace BlockAtelier.Game
 
         int albumPage = -1;
 
+        /// <summary>창 위에 잠깐 떴다 사라지는 안내</summary>
+        void ShowToast(string text)
+        {
+            var bg = UI.Panel("Toast", overlayRoot, new Vector2(0f, 0.2f), new Vector2(7f, 1f), Gfx.Hex("#151827"), 88);
+            var t = UI.Label(overlayCanvas, text, new Vector2(0f, 0.2f), 0.3f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
+            var bgc = bg.color;
+            Tween.Run(1.6f, k =>
+            {
+                if (t == null || bg == null) return;
+                float a = k < 0.75f ? 1f : 1f - (k - 0.75f) / 0.25f;
+                var c = t.color; c.a = a; t.color = c;
+                bg.color = new Color(bgc.r, bgc.g, bgc.b, 0.95f * a);
+            }, () => { if (t != null) Destroy(t.gameObject); if (bg != null) Destroy(bg.gameObject); });
+        }
+
         void ShowLevels()
         {
             if (busy && game.State == GameState.Playing) return;
@@ -863,12 +1046,13 @@ namespace BlockAtelier.Game
             if (albumPage < 0 || albumPage >= pages) albumPage = Mathf.Clamp(levelIndex / 10, 0, pages - 1);
             OpenOverlay(15.2f);
             int first = albumPage * 10, last = Mathf.Min(levels.Count, first + 10);
-            int done = 0;
-            for (int i = first; i < last; i++) if (cleared.Contains(levels[i].Id)) done++;
+            int albumStars = 0;
+            for (int i = first; i < last; i++) albumStars += progress.Get(levels[i].Id).Stars;
             string title = levels[first].AlbumTitle;
             if (string.IsNullOrEmpty(title)) title = "앨범 " + (albumPage + 1);
             UI.Label(overlayCanvas, title, new Vector2(0f, 6.7f), 0.7f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
-            UI.Label(overlayCanvas, "앨범 " + (albumPage + 1) + " / " + pages + " · 완성 " + done + " / " + (last - first),
+            UI.Label(overlayCanvas, "앨범 " + (albumPage + 1) + " / " + pages + "  ·  별 " + albumStars + " / " + (last - first) * 3
+                     + "  ·  전체 " + progress.TotalStars + " / " + levels.Count * 3,
                      new Vector2(0f, 5.9f), 0.3f, UI.Muted);
             if (albumPage > 0)
             {
@@ -882,6 +1066,7 @@ namespace BlockAtelier.Game
                 next.OnClick = () => { albumPage++; ShowLevels(); };
                 overlayButtons.Add(next);
             }
+            int frontier = progress.FrontierLevel(levels.Count);
             for (int i = first; i < last; i++)
             {
                 int k = i - first;
@@ -889,18 +1074,56 @@ namespace BlockAtelier.Game
                 if (k == 9) col = 1;
                 var pos = new Vector2(-2.6f + col * 2.6f, 4.4f - row * 2.55f);
                 var lv = levels[i];
-                bool isDone = cleared.Contains(lv.Id);
+                var rec = progress.Get(lv.Id);
+                bool open = progress.IsUnlocked(lv.Id);
+                bool isNext = lv.Id == frontier && !rec.Cleared;
                 int idx = i;
                 var b = new WorldButton(overlayRoot, overlayCanvas, "", pos, new Vector2(2.3f, 2.3f), false, 85);
-                b.Bg.color = i == levelIndex ? Gfx.Hex("#3A4170") : UI.Button;
-                b.OnClick = () => StartLevel(idx);
+                b.Bg.color = i == levelIndex ? Gfx.Hex("#3A4170") : isNext ? Gfx.Hex("#4A4A2E") : UI.Button;
+                if (open) b.OnClick = () => StartLevel(idx);
+                else
+                {
+                    var bt = b.Bg.transform;
+                    b.OnClick = () =>
+                    {
+                        Sfx.Play(Sfx.Tick, 0.5f, 0.6f);
+                        var p0 = bt.localPosition;
+                        Tween.Run(0.3f, q => bt.localPosition = p0 + Vector3.right * Mathf.Sin(q * 30f) * 0.08f * (1f - q), () => bt.localPosition = p0);
+                        ShowToast("앞 그림을 먼저 완성하면 열려요");
+                    };
+                }
                 overlayButtons.Add(b);
-                var th = Gfx.MakeSprite("Thumb", overlayRoot, Gfx.PictureSprite(lv, isDone), Color.white, 87);
-                th.transform.localPosition = new Vector3(pos.x, pos.y + 0.18f, 0f);
-                th.transform.localScale = Vector3.one * 1.45f;
-                UI.Panel("ThumbBg", overlayRoot, new Vector2(pos.x, pos.y + 0.18f), new Vector2(1.65f, 1.65f), UI.Canvas, 86);
-                UI.Label(overlayCanvas, lv.Id + (lv.Difficulty == "hard" ? " 어려움" : ""), new Vector2(pos.x, pos.y - 0.86f), 0.24f,
-                         lv.Difficulty == "hard" ? UI.Hard : UI.Ink);
+
+                var thumbPos = new Vector2(pos.x, pos.y + 0.2f);
+                UI.Panel("ThumbBg", overlayRoot, thumbPos, new Vector2(1.6f, 1.6f), open ? UI.Canvas : Gfx.Hex("#3A3F5C"), 86);
+                if (open)
+                {
+                    var th = Gfx.MakeSprite("Thumb", overlayRoot, Gfx.PictureSprite(lv, rec.Cleared), Color.white, 87);
+                    th.transform.localPosition = new Vector3(thumbPos.x, thumbPos.y, 0f);
+                    th.transform.localScale = Vector3.one * 1.4f;
+                }
+                else
+                {
+                    var lk = Gfx.MakeSprite("Lock", overlayRoot, Gfx.Lock, new Color(1f, 1f, 1f, 0.35f), 87);
+                    lk.transform.localPosition = new Vector3(thumbPos.x, thumbPos.y, 0f);
+                    lk.transform.localScale = Vector3.one * 0.8f;
+                }
+
+                // 아래 줄: 번호와 별 3칸
+                var idLabel = UI.Label(overlayCanvas, lv.Id.ToString(), new Vector2(pos.x - 0.7f, pos.y - 0.84f), 0.24f,
+                                       lv.Difficulty == "hard" ? UI.Hard : (open ? UI.Ink : UI.Muted), TextAnchor.MiddleCenter, 1f, true);
+                for (int s2 = 0; s2 < 3; s2++)
+                {
+                    var st = Gfx.MakeSprite("Star", overlayRoot, Gfx.Star, s2 < rec.Stars ? StarOn : StarOff, 87);
+                    st.transform.localPosition = new Vector3(pos.x - 0.2f + s2 * 0.4f, pos.y - 0.84f, 0f);
+                    st.transform.localScale = Vector3.one * 0.36f;
+                }
+                if (isNext)
+                {
+                    var bgT = b.Bg.transform;
+                    var baseScale = bgT.localScale;
+                    Tween.Run(0.6f, q => bgT.localScale = baseScale * (1f + 0.05f * Ease.Bump(q)), null, 0.3f);
+                }
             }
             var snd = OverlayButton(Sfx.Muted ? "소리 켜기" : "소리 끄기", -5.35f, false, null);
             snd.OnClick = () =>
@@ -1099,8 +1322,17 @@ namespace BlockAtelier.Game
                         break;
                     }
                     case "state":
-                        Ack("level " + game.Level.Id + " state " + game.State + " moves " + game.MovesUsed + " left " + game.Picture.RemainingPixels + " busy " + busy);
+                        Ack("level " + game.Level.Id + " state " + game.State + " moves " + game.MovesUsed + " left " + game.Picture.RemainingPixels + " busy " + busy
+                            + " time " + clock.ElapsedMs + " stars " + Scoring.Stars(game.Level, game.MovesUsed, game.ContinuesUsed)
+                            + " total " + progress.TotalStars + " progress " + progress.ToJson());
                         break;
+                    case "record":
+                    {
+                        // record 레벨 별 시간ms : 진행 기록을 직접 넣는다 (잠금·목록 화면 확인용)
+                        progress.Set(int.Parse(parts[1]), new LevelRecord { Stars = int.Parse(parts[2]), BestTimeMs = long.Parse(parts[3]) });
+                        SaveProgress();
+                        break;
+                    }
                     case "reset":
                         PlayerPrefs.DeleteAll();
                         LoadProgress();

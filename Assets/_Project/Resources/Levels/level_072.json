@@ -3,6 +3,7 @@
   "album": "things",
   "albumTitle": "생활 소품",
   "brush": 2,
+  "stars": {"three": 31, "two": 33},
   "difficulty": "normal",
   "targetClearRate": 0.71,
   "grayOnComplete": true,

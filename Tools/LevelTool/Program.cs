@@ -253,6 +253,8 @@ static class LevelTool
         sb.AppendFormat("  \"album\": \"{0}\",\n", lv.Album);
         sb.AppendFormat("  \"albumTitle\": \"{0}\",\n", lv.AlbumTitle);
         sb.AppendFormat(CultureInfo.InvariantCulture, "  \"brush\": {0},\n", lv.Brush);
+        if (lv.Star3Moves > 0)   // 별 기준은 StarTool이 따로 넣는다 (레벨을 다시 만들면 StarTool도 다시 실행)
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"stars\": {{\"three\": {0}, \"two\": {1}}},\n", lv.Star3Moves, lv.Star2Moves);
         sb.AppendFormat("  \"difficulty\": \"{0}\",\n", lv.Difficulty);
         sb.AppendFormat(CultureInfo.InvariantCulture, "  \"targetClearRate\": {0},\n", lv.TargetClearRate);
         sb.AppendFormat("  \"grayOnComplete\": {0},\n", lv.GrayOnComplete ? "true" : "false");
