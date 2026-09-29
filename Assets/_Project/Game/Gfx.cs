@@ -10,7 +10,7 @@ namespace BlockAtelier.Game
     {
         static Sprite block, well, pixel, circle, soft, ring, panel, gradient, streak, sparkle;
         static Material spriteMat, particleMat, trailMat;
-        static Font font;
+        static Font font, fontBold;
 
         /// <summary>광택 있는 블록 (흰색 바탕에 명암. SpriteRenderer.color로 색을 입힌다)</summary>
         public static Sprite Block { get { return block != null ? block : (block = MakeBlock(96)); } }
@@ -69,20 +69,33 @@ namespace BlockAtelier.Game
             }
         }
 
+        /// <summary>본문 글꼴: Pretendard SemiBold (Resources/Fonts). 없으면 OS 한글 글꼴.</summary>
         public static Font UIFont
         {
             get
             {
-                if (font == null)
-                {
-                    font = Font.CreateDynamicFontFromOSFont(new[]
-                    {
-                        "Apple SD Gothic Neo", "AppleSDGothicNeo-Bold", "Noto Sans CJK KR", "Noto Sans KR",
-                        "NotoSansCJK-Regular", "Malgun Gothic", "Arial Unicode MS", "Arial"
-                    }, 64);
-                }
+                if (font == null) font = Resources.Load<Font>("Fonts/Pretendard-SemiBold") ?? OSFont();
                 return font;
             }
+        }
+
+        /// <summary>제목·숫자용 굵은 글꼴: Pretendard ExtraBold</summary>
+        public static Font UIFontBold
+        {
+            get
+            {
+                if (fontBold == null) fontBold = Resources.Load<Font>("Fonts/Pretendard-ExtraBold") ?? UIFont;
+                return fontBold;
+            }
+        }
+
+        static Font OSFont()
+        {
+            return Font.CreateDynamicFontFromOSFont(new[]
+            {
+                "Apple SD Gothic Neo", "AppleSDGothicNeo-Bold", "Noto Sans CJK KR", "Noto Sans KR",
+                "NotoSansCJK-Regular", "Malgun Gothic", "Arial Unicode MS", "Arial"
+            }, 64);
         }
 
         public static Color Hex(string hex)

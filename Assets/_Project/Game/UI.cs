@@ -47,10 +47,10 @@ namespace BlockAtelier.Game
             var go = new GameObject("Label", typeof(RectTransform));
             go.transform.SetParent(canvas.transform, false);
             var t = go.AddComponent<Text>();
-            t.font = Gfx.UIFont;
+            t.font = bold ? Gfx.UIFontBold : Gfx.UIFont;
             t.text = text;
             t.fontSize = Mathf.RoundToInt(size * 100f);
-            t.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
+            t.fontStyle = FontStyle.Normal;   // 굵기는 글꼴 파일로 (가짜 볼드는 뭉개짐)
             t.color = color;
             t.alignment = align;
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
