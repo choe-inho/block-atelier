@@ -37,7 +37,9 @@ namespace BlockAtelier.Game
         Text titleText, movesText, pctText, pctLabel;
         readonly List<Text> chipTexts = new List<Text>();
         readonly List<SpriteRenderer> chipDots = new List<SpriteRenderer>();
-        Transform chipRoot;
+        Transform chipRoot, pictureHolder;
+        bool wideLayout;                                   // 가로로 넓은 화면: 그림 왼쪽, 보드 오른쪽
+        Vector2 chipCenter = new Vector2(3.0f, -4.45f);
         WorldButton undoBtn, restartBtn, levelsBtn;
         readonly List<WorldButton> overlayButtons = new List<WorldButton>();
         Transform overlayRoot;
@@ -106,7 +108,9 @@ namespace BlockAtelier.Game
 
             board = new BoardView(middle);
             board.Root.localPosition = new Vector3(0f, -0.35f, 0f);
-            picture = new PictureView(top);
+            pictureHolder = new GameObject("PictureHolder").transform;
+            pictureHolder.SetParent(top, false);
+            picture = new PictureView(pictureHolder);
             tray = new TrayView(bottom, bottomCanvas, board);
             tray.Root.localPosition = new Vector3(0f, 2.75f, 0f);
             // HoldLabel은 bottomCanvas 기준이라 트레이 위치만큼 옮긴다
@@ -189,9 +193,14 @@ namespace BlockAtelier.Game
             return new Vector2(Mathf.Min(topIn, 0.12f), Mathf.Min(botIn, 0.08f));
         }
 
+        // 넓은 화면 배치: 왼쪽 칸(그림과 진행 표시) + 오른쪽 칸(보드, 컨베이어, 버튼)
+        const float ColW = 10.2f, ColGap = 1.0f, WideH = 14.4f;
+        const float WideW = ColW * 2f + ColGap;
+
         /// <summary>
-        /// 어떤 비율의 화면이든 설계 영역(가로 DesignW x 세로 DesignH)이 안전 영역 안에 통째로 들어가게 카메라를 맞춘다.
-        /// 긴 폰: 위아래 요소는 가장자리로, 보드는 가운데. 넓은 화면(태블릿·폴드): 높이에 맞추고 좌우는 배경.
+        /// 어떤 비율의 화면이든 내용이 안전 영역 안에 통째로 들어가게 카메라를 맞춘다.
+        /// 세로 배치(폰)와 좌우 배치(태블릿 가로, 폴드 펼침 가로, 듀얼 화면) 중 내용이 더 크게 보이는 쪽을 고른다.
+        /// 긴 폰: 위아래 요소는 가장자리로, 보드는 가운데. 남는 폭은 배경.
         /// </summary>
         void Layout(float aspect)
         {
@@ -199,19 +208,84 @@ namespace BlockAtelier.Game
             lastSafe = Screen.safeArea;
             var ins = SafeInsets();
             float usable = Mathf.Max(0.5f, 1f - ins.x - ins.y);
-            float size = Mathf.Max(DesignH * 0.5f / usable, DesignW * 0.5f / aspect);
+            float sizePhone = Mathf.Max(DesignH * 0.5f / usable, DesignW * 0.5f / aspect);
+            float sizeWide = Mathf.Max(WideH * 0.5f / usable, WideW * 0.5f / aspect);
+            bool wide = sizeWide < sizePhone * 0.97f;
+            float size = wide ? sizeWide : sizePhone;
             cam.orthographicSize = size;
             float halfW = size * aspect;
             float topY = size - 2f * size * ins.x;          // 안전 영역 위쪽 끝
             float botY = -size + 2f * size * ins.y;         // 안전 영역 아래쪽 끝
             float midY = (topY + botY) * 0.5f;
-            float slack = (topY - botY) - DesignH;          // 설계 높이보다 남는 세로 길이
-            top.localPosition = new Vector3(0f, topY, 0f);
-            bottom.localPosition = new Vector3(0f, botY, 0f);
-            // 세로가 남으면 보드를 살짝 아래로 (엄지에 가깝게), 위아래 요소는 가장자리에 붙인다
-            middle.localPosition = new Vector3(0f, midY + Mathf.Clamp(slack * -0.15f, -1f, 0f), 0f);
+            if (wide)
+            {
+                // 두 칸을 세로 가운데에 모은다 (가운데 틈은 듀얼 화면의 경첩 자리)
+                float colTop = midY + WideH * 0.5f, colBot = midY - WideH * 0.5f;
+                float cx = (ColW + ColGap) * 0.5f;
+                top.localPosition = new Vector3(-cx, colTop, 0f);
+                bottom.localPosition = new Vector3(cx, colBot, 0f);
+                middle.localPosition = new Vector3(cx, colBot + 9.05f, 0f);
+            }
+            else
+            {
+                float slack = (topY - botY) - DesignH;      // 설계 높이보다 남는 세로 길이
+                top.localPosition = new Vector3(0f, topY, 0f);
+                bottom.localPosition = new Vector3(0f, botY, 0f);
+                // 세로가 남으면 보드를 살짝 아래로 (엄지에 가깝게), 위아래 요소는 가장자리에 붙인다
+                middle.localPosition = new Vector3(0f, midY + Mathf.Clamp(slack * -0.15f, -1f, 0f), 0f);
+            }
             overlayRoot.localPosition = new Vector3(0f, midY, 0f);
             background.transform.localScale = new Vector3(halfW * 2f / (4f / 4f) + 1f, size * 2f / (128f / 4f) + 0.1f, 1f);
+            if (wide != wideLayout || !hudPlaced) ApplyHudLayout(wide);
+        }
+
+        bool hudPlaced;
+
+        static void Place(Text t, float x, float y) { t.rectTransform.anchoredPosition = new Vector2(x, y) * 100f; }
+
+        /// <summary>위쪽 묶음(그림, 완성도, 별, 색 칩) 배치. 폰은 그림 왼쪽·정보 오른쪽, 넓은 화면은 큰 그림 아래 정보.</summary>
+        void ApplyHudLayout(bool wide)
+        {
+            wideLayout = wide;
+            hudPlaced = true;
+            if (wide)
+            {
+                pictureHolder.localPosition = new Vector3(0f, -5.35f, 0f);
+                pictureHolder.localScale = Vector3.one * 1.75f;
+                Place(pctText, -2.5f, -10.75f);
+                Place(pctLabel, -2.5f, -11.55f);
+                for (int i = 0; i < 3; i++) hudStars[i].transform.localPosition = new Vector3(1.35f + i * 0.62f, -10.55f, 0f);
+                Place(starHint, 1.97f, -11.3f);
+                chipCenter = new Vector2(0f, -12.85f);
+            }
+            else
+            {
+                pictureHolder.localPosition = new Vector3(-2.15f, -3.35f, 0f);
+                pictureHolder.localScale = Vector3.one;
+                Place(pctText, 2.95f, -2.55f);
+                Place(pctLabel, 2.95f, -3.35f);
+                for (int i = 0; i < 3; i++) hudStars[i].transform.localPosition = new Vector3(2.35f + i * 0.6f, -1.45f, 0f);
+                Place(starHint, 2.95f, -5.2f);
+                chipCenter = new Vector2(3.0f, -4.45f);
+            }
+            if (game != null) { BuildChips(); RenderHud(); }
+        }
+
+        /// <summary>
+        /// 화면 방향: 폰은 세로 고정, 짧은 변이 3.5인치 이상인 큰 화면(태블릿, 폴드 펼침)은 가로도 허용.
+        /// 폴드를 접고 펼 때마다 다시 판단한다.
+        /// </summary>
+        void ConfigureOrientation()
+        {
+            if (Application.isEditor) return;
+            float dpi = Screen.dpi > 1f ? Screen.dpi : 160f;
+            float shortInch = Mathf.Min(Screen.width, Screen.height) / dpi;
+            bool large = shortInch >= 3.5f;
+            Screen.autorotateToPortrait = true;
+            Screen.autorotateToPortraitUpsideDown = large;
+            Screen.autorotateToLandscapeLeft = large;
+            Screen.autorotateToLandscapeRight = large;
+            Screen.orientation = large ? ScreenOrientation.AutoRotation : ScreenOrientation.Portrait;
         }
 
         // ---------------- 레벨 ----------------
@@ -296,7 +370,7 @@ namespace BlockAtelier.Game
             for (int i = 0; i < palette.Length; i++) palette[i] = Gfx.Hex(lv.Palette[i]);
             board.SetPalette(palette);
             picture.Setup(lv, palette, 4.3f);
-            picture.Root.localPosition = new Vector3(-2.15f, -3.35f, 0f);
+            picture.Root.localPosition = Vector3.zero;
             picture.Root.localScale = Vector3.one;
 
             titleText.text = lv.Id + "  " + lv.PictureName + (lv.Difficulty == "hard" ? "  <color=#FF6B6B>어려움</color>" : "");
@@ -321,19 +395,20 @@ namespace BlockAtelier.Game
 
         void BuildChips()
         {
-            for (int i = chipRoot.childCount - 1; i >= 0; i--) Destroy(chipRoot.GetChild(i).gameObject);
-            foreach (var t in chipTexts) if (t != null) Destroy(t.gameObject);
+            // 같은 프레임에 캡처해도 옛 칩이 보이지 않게 먼저 끈다
+            for (int i = chipRoot.childCount - 1; i >= 0; i--) { var ch = chipRoot.GetChild(i).gameObject; ch.SetActive(false); Destroy(ch); }
+            foreach (var t in chipTexts) if (t != null) { t.gameObject.SetActive(false); Destroy(t.gameObject); }
             chipTexts.Clear();
             chipDots.Clear();
             int n = 0;
             for (int c = 1; c <= game.Level.ColorCount; c++) if (game.Picture.Total(c) > 0) n++;
             float spacing = 1.2f;
-            float x0 = 3.0f - (n - 1) * spacing * 0.5f;
+            float x0 = chipCenter.x - (n - 1) * spacing * 0.5f;
             int k = 0;
             for (int c = 1; c <= game.Level.ColorCount; c++)
             {
                 if (game.Picture.Total(c) == 0) { chipTexts.Add(null); chipDots.Add(null); continue; }
-                var pos = new Vector2(x0 + k * spacing, -4.45f);
+                var pos = new Vector2(x0 + k * spacing, chipCenter.y);
                 var bg = UI.Panel("Chip", chipRoot, pos, new Vector2(1.1f, 0.62f), UI.Button, 40);
                 var dot = Gfx.MakeSprite("Dot", chipRoot, Gfx.Block, palette[c], 41);
                 dot.transform.localPosition = pos + new Vector2(-0.3f, 0f);
@@ -448,7 +523,11 @@ namespace BlockAtelier.Game
 
         void Update()
         {
-            if (!Mathf.Approximately(cam.aspect, lastAspect) || Screen.safeArea != lastSafe) Layout(cam.aspect);
+            if (!Mathf.Approximately(cam.aspect, lastAspect) || Screen.safeArea != lastSafe)
+            {
+                ConfigureOrientation();
+                Layout(cam.aspect);
+            }
             if (game != null)
             {
                 board.Tick(game.Board);

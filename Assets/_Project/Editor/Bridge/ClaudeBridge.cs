@@ -132,7 +132,13 @@ namespace BlockAtelier.Bridge
                 case "projectsetup":
                     PlayerSettings.productName = "블록 아틀리에";
                     PlayerSettings.companyName = "Inho";
-                    PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
+                    // 폰은 게임 코드에서 세로로 고정하고, 태블릿·폴드 펼침은 가로도 허용한다 (GameRoot.ConfigureOrientation)
+                    PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
+                    PlayerSettings.allowedAutorotateToPortrait = true;
+                    PlayerSettings.allowedAutorotateToPortraitUpsideDown = true;
+                    PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+                    PlayerSettings.allowedAutorotateToLandscapeRight = true;
+                    PlayerSettings.Android.resizeableActivity = true;   // 폴드 접기·펼치기, 분할 화면
                     PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Android, "com.inho.blockatelier");
                     PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.iOS, "com.inho.blockatelier");
                     PlayerSettings.SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget.Standalone, "com.inho.blockatelier");
