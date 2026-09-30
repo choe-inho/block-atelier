@@ -28,6 +28,7 @@ namespace NUnit.Framework
         public static void IsTrue(bool c, string msg = null) { if (!c) throw new AssertionException("참이어야 함 " + msg); }
         public static void IsFalse(bool c, string msg = null) { if (c) throw new AssertionException("거짓이어야 함 " + msg); }
         public static void IsNotNull(object o, string msg = null) { if (o == null) throw new AssertionException("null이면 안 됨 " + msg); }
+        public static void IsNull(object o, string msg = null) { if (o != null) throw new AssertionException("null이어야 함, 실제 " + o + " " + msg); }
     }
 
     public static class StringAssert

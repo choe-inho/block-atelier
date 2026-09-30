@@ -322,6 +322,7 @@ namespace BlockAtelier.Game
 
         void GoHome()
         {
+            LogLeave("home");
             ShowScreen(Page.Home);
         }
 

@@ -40,7 +40,7 @@ namespace BlockAtelier.Game
         Transform chipRoot, pictureHolder;
         bool wideLayout;                                   // 가로로 넓은 화면: 그림 왼쪽, 보드 오른쪽
         Vector2 chipCenter = new Vector2(3.0f, -4.45f);
-        WorldButton undoBtn, restartBtn, levelsBtn;
+        WorldButton undoBtn, hintBtn, restartBtn, levelsBtn;
         readonly List<WorldButton> overlayButtons = new List<WorldButton>();
         Transform overlayRoot;
 
@@ -132,10 +132,15 @@ namespace BlockAtelier.Game
             }
             starHint = UI.Label(topCanvas, "", new Vector2(2.95f, -5.2f), 0.22f, UI.Muted, TextAnchor.MiddleCenter, 3.8f);
 
-            undoBtn = new WorldButton(bottom, bottomCanvas, "되돌리기", new Vector2(-3.25f, 0.85f), new Vector2(3.0f, 0.95f), false, 45);
-            restartBtn = new WorldButton(bottom, bottomCanvas, "처음부터", new Vector2(0f, 0.85f), new Vector2(3.0f, 0.95f), false, 45);
-            levelsBtn = new WorldButton(bottom, bottomCanvas, "홈", new Vector2(3.25f, 0.85f), new Vector2(3.0f, 0.95f), false, 45);
+            // 하단 버튼 4개: 되돌리기, 힌트, 처음부터, 홈 (폭 2.35, 틈 0.15)
+            undoBtn = BottomButton("되돌리기", -3.75f);
+            hintBtn = BottomButton("힌트", -1.25f);
+            restartBtn = BottomButton("처음부터", 1.25f);
+            levelsBtn = BottomButton("홈", 3.75f);
+            undoAdBadge = AdBadge(bottom, bottomCanvas, new Vector2(-3.75f + 0.95f, 1.3f), 46);
+            hintAdBadge = AdBadge(bottom, bottomCanvas, new Vector2(-1.25f + 0.95f, 1.3f), 46);
             undoBtn.OnClick = DoUndo;
+            hintBtn.OnClick = DoHint;
             restartBtn.OnClick = () => StartLevel(levelIndex);
             levelsBtn.OnClick = GoHome;
 
@@ -145,6 +150,7 @@ namespace BlockAtelier.Game
 
             LoadLevels();
             LoadProgress();
+            InitMonetization();
             Layout(cam.aspect);
             StartLevel(ResumeIndex());
             ShowScreen(Page.Home);      // 앱을 켜면 홈부터
@@ -345,6 +351,7 @@ namespace BlockAtelier.Game
 
         void StartLevel(int index)
         {
+            if (game != null) LogLeave(index == levelIndex ? "restart" : "level");
             if (screen != Page.Game) ShowScreen(Page.Game);
             Tween.StopAll();
             StopAllCoroutines();
@@ -359,7 +366,8 @@ namespace BlockAtelier.Game
             PlayerPrefs.SetInt("ba_level", levelIndex);
             var lv = levels[levelIndex];
             game = new GameSession(lv);
-            undoLeft = 3;
+            undoLeft = adConfig.FreeUndosPerGame;
+            OnLevelStarted(index);
             clock.Reset();
             shownSecond = -1;
             shownStars = 3;
@@ -449,8 +457,7 @@ namespace BlockAtelier.Game
                 t.text = left == 0 ? "✓" : left.ToString();
                 t.color = left == 0 ? UI.Good : UI.Ink;
             }
-            undoBtn.Label.text = "되돌리기 " + undoLeft;
-            undoBtn.SetEnabled(!busy && undoLeft > 0 && game.CanUndo && game.State == GameState.Playing);
+            RenderAdButtons();
         }
 
         void UpdateMovesText()
@@ -513,7 +520,7 @@ namespace BlockAtelier.Game
         bool ClockRunning()
         {
             return game != null && screen == Page.Game && game.State == GameState.Playing && !busy
-                   && overlayRoot.childCount <= 1 && Application.isFocused;
+                   && overlayRoot.childCount <= 1 && !adOpen && !adPending && Application.isFocused;
         }
 
         void RenderAll()
@@ -536,6 +543,7 @@ namespace BlockAtelier.Game
             if (game != null)
             {
                 board.Tick(game.Board);
+                TickMonetization(Time.unscaledDeltaTime);
                 clock.Tick(Time.unscaledDeltaTime, ClockRunning());
                 if (clock.ElapsedMs / 1000 != shownSecond) UpdateMovesText();
             }
@@ -559,6 +567,13 @@ namespace BlockAtelier.Game
 
         void OnDown(Vector3 wp)
         {
+            if (adOpen)
+            {
+                foreach (var b in adButtons)
+                    if (b.Hit(wp)) { b.Press(); if (b.OnClick != null) b.OnClick(); return; }
+                return;
+            }
+            if (adPending) return;
             if (overlayRoot.childCount > 1)
             {
                 foreach (var b in overlayButtons)
@@ -571,7 +586,7 @@ namespace BlockAtelier.Game
                     if (b.Hit(wp)) { b.Press(); if (b.OnClick != null) b.OnClick(); return; }
                 return;
             }
-            foreach (var b in new[] { undoBtn, restartBtn, levelsBtn })
+            foreach (var b in new[] { undoBtn, hintBtn, restartBtn, levelsBtn })
                 if (b.Hit(wp)) { b.Press(); if (b.OnClick != null) b.OnClick(); return; }
             if (busy || game.State != GameState.Playing) return;
 
@@ -580,18 +595,30 @@ namespace BlockAtelier.Game
             BeginDrag(src, wp);
         }
 
-        void ShowHand()
+        void ShowHand() { ShowHand(false); }
+
+        /// <summary>손가락으로 다음 수를 보여 준다. 첫 레벨 안내와 힌트가 같이 쓴다. 보여 줬으면 true.</summary>
+        bool ShowHand(bool hint)
         {
-            if (screen != Page.Game) return;
-            if (hand != null || game.MovesUsed > 0 || demo) return;
+            if (screen != Page.Game || game.State != GameState.Playing) return false;
+            if (hint) HideHand();
+            else if (hand != null || game.MovesUsed > 0 || demo) return false;
             var bot = new AutoSolver(1, 0);
             AutoSolver.Action a;
-            if (!bot.ChooseAction(game, out a) || a.IsStash) return;
+            if (!bot.ChooseAction(game, out a)) return false;
+            if (a.IsStash)
+            {
+                if (!hint) return false;
+                tray.Nudge(BlockSource.Conveyor(a.StashIndex));
+                ShowToast("이 블록을 보관함에 넣어 보세요");
+                return true;
+            }
             var block = game.GetBlock(a.Source);
             var shape = block.Shape;
             var piece = BuildPiece(block, 34);
             var offset = new Vector3(-(shape.Width - 1) * BoardView.Pitch * 0.5f, (shape.Height - 1) * BoardView.Pitch * 0.5f, 0f);
             hand = TutorialHand.Show(transform, piece, tray.SlotWorld(a.Source) + offset, board.CellWorld(BoardModel.Index(a.X, a.Y)));
+            return true;
         }
 
         void HideHand()
@@ -965,6 +992,7 @@ namespace BlockAtelier.Game
             var result = progress.Submit(game.Level, game.MovesUsed, game.ContinuesUsed, clock.ElapsedMs);
             newUnlocks = AvatarUnlocks.Between(starsBefore, progress.TotalStars);
             SaveProgress();
+            OnLevelWon(result);
             yield return new WaitForSeconds(0.25f);
             float d = picture.Celebrate();
             Sfx.Play(Sfx.Win, 0.9f);
@@ -979,6 +1007,7 @@ namespace BlockAtelier.Game
         IEnumerator LoseSequence()
         {
             busy = true;
+            OnLevelLost();
             yield return new WaitForSeconds(0.2f);
             Sfx.Play(Sfx.Fail, 0.7f);
             Tween.Run(0.5f, k => board.Desaturate(k * 0.1f));
@@ -989,7 +1018,14 @@ namespace BlockAtelier.Game
 
         void DoUndo()
         {
-            if (busy || undoLeft <= 0 || !game.CanUndo) return;
+            if (busy || adOpen || !game.CanUndo || game.State != GameState.Playing) return;
+            if (undoLeft <= 0)
+            {
+                // 무료 되돌리기를 다 쓰면 광고를 보고 충전
+                ShowRewardedFor("undo", () => { undoLeft += adConfig.UndoRefill; DoUndo(); });
+                return;
+            }
+            HideHand();
             if (game.Undo())
             {
                 undoLeft--;
@@ -1158,7 +1194,7 @@ namespace BlockAtelier.Game
             }
 
             bool hasNext = levelIndex < levels.Count - 1;
-            if (hasNext) OverlayButton("다음 레벨", -3.3f - sh, true, () => StartLevel(levelIndex + 1));
+            if (hasNext) OverlayButton("다음 레벨", -3.3f - sh, true, NextLevelWithAd);
             else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -3.3f - sh), 0.34f, UI.Ink);
             OverlayButton(res.Stars < 3 ? "다시 해서 별 모으기" : "홈으로", -4.7f - sh, false,
                           res.Stars < 3 ? (System.Action)(() => StartLevel(levelIndex)) : GoHome);
@@ -1173,15 +1209,30 @@ namespace BlockAtelier.Game
             OpenOverlay(13.2f);
             UI.Label(overlayCanvas, pct + "% 완성에서 멈췄어요", new Vector2(0f, 5.6f), 0.62f, UI.Ink, TextAnchor.MiddleCenter, 8f, true);
             BigPicture(2.5f, 4.2f, false);
-            UI.Label(overlayCanvas, "이어하면 회색 칸 3개를 지우고 작은 블록 3개를 받아요", new Vector2(0f, -0.35f), 0.26f, UI.Muted);
-            OverlayButton("이어하기", -1.9f, true, () =>
+            var offer = AdPolicy.ContinueOffer(adConfig, levelIndex + 1, game.ContinuesUsed);
+            System.Action doContinue = () =>
             {
                 HideOverlay();
                 game.Continue();
                 busy = false;
                 RenderAll();
                 Sfx.Play(Sfx.Pop, 0.7f);
-            });
+                Log("continue_used", "level", levelIndex + 1, "free", offer == Offer.Free);
+            };
+            if (offer == Offer.None)
+            {
+                UI.Label(overlayCanvas, "이어하기는 한 판에 " + adConfig.ContinuesPerGame + "번까지예요", new Vector2(0f, -0.35f), 0.26f, UI.Muted);
+                OverlayButton("처음부터", -1.9f, true, () => StartLevel(levelIndex));
+                OverlayButton("홈으로", -3.3f, false, GoHome);
+                return;
+            }
+            UI.Label(overlayCanvas, "이어하면 회색 칸 3개를 지우고 작은 블록 3개를 받아요", new Vector2(0f, -0.35f), 0.26f, UI.Muted);
+            if (offer == Offer.Free) OverlayButton("이어하기", -1.9f, true, doContinue);
+            else
+            {
+                OverlayButton("광고 보고 이어하기", -1.9f, true, () => ShowRewardedFor("continue", doContinue));
+                OfferShown("continue");
+            }
             OverlayButton("처음부터", -3.3f, false, () => StartLevel(levelIndex));
             OverlayButton("홈으로", -4.7f, false, GoHome);
         }
@@ -1334,7 +1385,7 @@ namespace BlockAtelier.Game
 
         void DemoTick()
         {
-            if (busy || game.State != GameState.Playing) return;
+            if (busy || adOpen || adPending || game.State != GameState.Playing) return;
             demoTimer -= Time.deltaTime;
             if (demoTimer > 0f) return;
             demoTimer = 0.55f;
@@ -1496,8 +1547,9 @@ namespace BlockAtelier.Game
                     {
                         // press 버튼글자 : 보이는 버튼을 글자로 찾아 누른다 (화면 흐름 시험용)
                         string want = raw.Trim().Substring(6);
-                        var all = new List<WorldButton>(overlayRoot.childCount > 1 ? overlayButtons : screen != Page.Game ? screenButtons : new List<WorldButton> { undoBtn, restartBtn, levelsBtn });
+                        var all = new List<WorldButton>(adOpen ? adButtons : overlayRoot.childCount > 1 ? overlayButtons : screen != Page.Game ? screenButtons : new List<WorldButton> { undoBtn, hintBtn, restartBtn, levelsBtn });
                         var hitBtn = all.Find(b => b.Label != null && b.Label.text == want && b.Enabled);
+                        if (hitBtn == null) hitBtn = all.Find(b => b.Label != null && b.Label.text.StartsWith(want) && b.Enabled);   // "힌트" → "힌트 3"
                         if (hitBtn == null) Ack("버튼 없음: " + want);
                         else { hitBtn.Press(); if (hitBtn.OnClick != null) hitBtn.OnClick(); }
                         break;
@@ -1534,6 +1586,10 @@ namespace BlockAtelier.Game
                     case "reset":
                         PlayerPrefs.DeleteAll();
                         LoadProgress();
+                        InitMonetization();
+                        break;
+                    default:
+                        if (!DevAdCommand(parts)) Ack("모르는 명령 " + cmd);
                         break;
                 }
                 Ack("완료 " + raw.Trim());

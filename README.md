@@ -10,14 +10,15 @@
 | `Assets/_Project/Editor/Bridge` | Claude 자동화 다리: 컴파일·콘솔 로그, 명령 파일, 테스트 실행 |
 | `Assets/_Project/Core` | 게임 규칙 전체 (UnityEngine 의존 없음). `GameSession`이 한 판을 담당 |
 | `Assets/_Project/Core/Sim/AutoSolver.cs` | 자동 풀이 봇. 난이도 측정용, 나중에 힌트 기능에도 사용 |
-| `Assets/_Project/Tests` | 규칙 테스트 39개 (Unity Test Runner, EditMode) |
+| `Assets/_Project/Tests` | 규칙 테스트 49개 (Unity Test Runner, EditMode) |
 | `Assets/_Project/Resources/Levels` | 앨범 10개 × 10 = 레벨 100개 JSON |
 | `Assets/_Project/Art/Previews` | 앨범별 그림 미리보기 (칠한 모습 / 칠하기 전) |
 | `Tools/LevelTool` | 레벨 생성·밸런싱 도구 (봇으로 클리어율을 재서 블록 순서를 고름) |
 | `Tools/art` | 24x24 픽셀 그림 원본(벡터 도형 → 픽셀, 자동 명암·윤곽선)과 미리보기 렌더러 (Python) |
 | `Tools/WebPrototype` | 폰에서 해보는 웹 프로토타입 (같은 규칙의 JS 버전) |
 
-광고, 결제, 분석 SDK는 아직 없다. 코어와 화면 위에 인터페이스로 붙일 예정.
+광고·분석·원격 설정은 인터페이스(`Game/Services.cs`의 `IAdService`, `IAnalytics`, `IRemoteConfig`) 뒤에 있고, 지금은 가짜 구현으로 동작한다.
+실제 SDK(LevelPlay, Firebase)는 계정을 만든 뒤 어댑터 하나씩만 추가하면 된다. 결제(광고 제거)는 아직 없다.
 
 ## 플레이
 
@@ -34,6 +35,16 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 - 시간: 첫 블록을 놓은 순간부터, 조작할 수 있던 시간만 잰다 (연출·창·앱 전환 중엔 멈춤). 이어하기를 쓴 판은 시간 기록 제외.
 - 기록은 레벨마다 최고 별과 최단 시간만 `PlayerPrefs`의 `ba_progress`에 저장한다 (`Core/Progress.cs`, 서버 동기화 때 그대로 병합).
 
+## 광고·분석 (block-atelier-monetization 스킬 기준)
+
+- 판단 규칙은 `Core/AdPolicy.cs`(Unity 없이 테스트). 화면 연결은 `Game/GameRoot.Ads.cs`.
+- 보상형: 실패 창 '광고 보고 이어하기'(1~10레벨은 무료, 그 뒤 판당 2번), 되돌리기 3번을 다 쓰면 '+3' 충전, 힌트(처음 3번 무료). 광고 자리 버튼에는 노란 '광고' 표시.
+- 전면: 완성 창의 '다음 레벨'에서만, 1초 안내 뒤. 13레벨 전·설치 후 8분 전·세션 첫 판·2번 넘게 실패하고 깬 판 뒤엔 없음, 2판·150초 간격, 세션 4번·하루 10번까지.
+- 실험군: 원격 설정 `ads_weights`(대조,기본,적극 비율, 기본 "0,1,0"), 값 덮어쓰기 `ads_config`(JSON, 키는 `AdConfig` 필드 이름). 설치 id로 배정.
+- 이벤트: session_start/end, level_start/complete/fail/leave, hint_used, continue_used, ad_offer/gate/shown/reward/closed/quit/unavailable. 에디터에서는 `Logs/claude_events.txt`.
+- 저장: `ba_ads`(광고 기록), `ba_install`(설치 id).
+- 광고 빈도 시뮬레이션: 아래 'AdSim'. 지금 기준(기본군) 플레이 1시간에 전면 약 7.8번, 첫 전면은 누적 약 21분(13레벨).
+
 ## 이펙트 조절
 
 `Game/Fx.cs` 위쪽의 `DropTime`, `DropStagger`, `ShakePerLine`, `ShakeExplode`와
@@ -43,7 +54,7 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 `Logs/claude_cmd.txt`에 한 줄씩 쓰면 에디터가 실행한다: `refresh`, `play`, `stop`, `tests`, `projectsetup`, `ping`.
 플레이 중에는 `Logs/claude_game.txt`로 게임 명령을 보낸다:
-`level N`, `home`, `mypage`, `settings`, `avatar`, `look 코드`, `record 레벨 별 ms`, `album N`, `press 버튼글자`, `nick 이름`, `demo`, `demo off`, `speed X`, `wait 초`, `shot 이름`, `shots 이름 개수 간격`,
+`level N`, `home`, `mypage`, `settings`, `avatar`, `look 코드`, `record 레벨 별 ms`, `ads`, `adgroup 군`, `adconfig {json}`, `adtime 초`, `adfill on|off`, `playtime 초`, `session N`, `noads`, `adreset`, `loseview`, `album N`, `press 버튼글자`, `nick 이름`, `demo`, `demo off`, `speed X`, `wait 초`, `shot 이름`, `shots 이름 개수 간격`,
 `place 슬롯 x y`, `fillrow y 색 빈칸`, `fillcol x 색 빈칸`, `give 모양 색 ...`, `until Won 초`, `state`, `reset`.
 캡처는 `Logs/shots/`에 1080x2340으로 저장된다.
 
@@ -51,7 +62,7 @@ Game 뷰 해상도는 세로 폰 비율(예: 1080x2340)로 두면 실제 화면�
 
 1. Unity Hub에서 2D 템플릿으로 새 프로젝트를 만든다 (Unity 6 LTS 권장).
 2. 이 폴더의 `Assets/_Project`를 새 프로젝트의 `Assets` 아래에 복사한다.
-3. `Window > General > Test Runner > EditMode > Run All`. 39개가 모두 통과해야 한다.
+3. `Window > General > Test Runner > EditMode > Run All`. 49개가 모두 통과해야 한다.
 
 레벨 불러오기 예시:
 
@@ -98,6 +109,16 @@ mono StarTool.exe Assets/_Project/Resources/Levels 200 51 100
 새 표본으로 검증해서 벗어나면 표본을 합쳐 다시 맞추기를 반복하고, 결과는 `Tools/LevelTool/star_report.tsv`.
 
 난이도 목표는 `Tools/LevelTool/Program.cs`의 `Plans` 표에서 바꾼다. 봇의 사람 흉내 정도(`HumanNoise`)는 실제 플레이 테스트 결과로 보정해야 한다.
+
+광고 빈도 시뮬레이션 (광고 수치를 바꾸면 실행):
+
+```bash
+mcs -langversion:7.2 -optimize+ -out:AdSim.exe $(find Assets/_Project/Core -name '*.cs') Tools/LevelTool/AdSim.cs
+mono AdSim.exe Tools/LevelTool/balance_report.tsv 300
+```
+
+가상 플레이어 300명을 7일(하루 3세션, 6~20분) 돌려 실험군별 1시간당 전면·보상형 수, 첫 광고 시점을 `Tools/LevelTool/ad_report.tsv`에 쓴다.
+한 수 3.5초, 광고 이어하기 선택 35% 같은 플레이어 가정은 파일 위쪽 상수. 실제 데이터가 생기면 맞춰 고친다.
 
 테스트도 Unity 없이 돌릴 수 있다:
 

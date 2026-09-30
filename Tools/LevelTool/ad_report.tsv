@@ -1,0 +1,4 @@
+group	playHours	interPerHour	interPerSession	interPerLevel	rewardedPerHour	firstAdMin	firstAdLevel	levelsDone	sessionCapHit	dailyCapHit
+control	4.277	0	0	0	2.967	-1	-1	99.87	0	0
+base	4.55	7.84	1.82	0.358	2.807	20.72	13.327	99.54	0.006	0.004
+aggressive	4.572	8.432	1.955	0.388	2.822	13.762	9.097	99.46	0	0.007
