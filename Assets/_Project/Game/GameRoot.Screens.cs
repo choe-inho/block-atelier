@@ -210,6 +210,7 @@ namespace BlockAtelier.Game
             ScreenSprite("Gear", Gfx.Gear, setBtn.Bg.transform.localPosition, 0.62f, UI.Ink, 24);
             var meBtn = ScreenButton("", new Vector2(x1 - 1.85f, yTop - 0.7f), new Vector2(1.1f, 1.1f), false, 22, () => ShowScreen(Page.MyPage));
             AvatarBadge(meBtn.Bg.transform.localPosition, 0.9f, 24);
+            if (NewUnlockCount() > 0) NewDot(meBtn.Bg.transform.localPosition + new Vector3(0.45f, 0.45f, 0f), 27);
 
             // 이어서 그리기 카드
             int front = Mathf.Clamp(progress.FrontierLevel(levels.Count) - 1, 0, levels.Count - 1);
@@ -269,11 +270,41 @@ namespace BlockAtelier.Game
             ScreenLabel(a.Stars.ToString(), pos + new Vector2(w * 0.5f - 0.8f, -1.28f), 0.22f, UI.Muted, TextAnchor.MiddleLeft, 0.8f);
         }
 
-        /// <summary>프로필: 픽셀 캐릭터를 캔버스색 둥근 판 위에</summary>
+        /// <summary>프로필: 픽셀 캐릭터를 고른 배경색 둥근 판 위에</summary>
         void AvatarBadge(Vector3 pos, float size, int order)
         {
-            UI.Panel("AvatarBg", screenRoot, pos, new Vector2(size, size), UI.Canvas, order);
-            ScreenSprite("Avatar", Gfx.AvatarSprite(profile.Look), pos, size * 0.86f, Color.white, order + 1);
+            AvatarBadge(screenRoot, pos, size, order, profile.Look);
+        }
+
+        static void AvatarBadge(Transform parent, Vector3 pos, float size, int order, AvatarSpec look)
+        {
+            UI.Panel("AvatarBg", parent, pos, new Vector2(size, size), Gfx.Hex(AvatarSpec.BackgroundColors[look.Background]), order);
+            var sr = Gfx.MakeSprite("Avatar", parent, Gfx.AvatarSprite(look), Color.white, order + 1);
+            sr.transform.localPosition = pos;
+            sr.transform.localScale = Vector3.one * size * 0.86f;
+        }
+
+        // ---------------- 꾸미기 열림 ----------------
+
+        const string UnlockSeenKey = "ba_unlock_seen";
+
+        /// <summary>꾸미기 화면을 마지막으로 연 뒤 새로 열린 개수</summary>
+        int NewUnlockCount()
+        {
+            int seen = PlayerPrefs.GetInt(UnlockSeenKey, 0);
+            return AvatarUnlocks.UnlockedCount(progress.TotalStars) - AvatarUnlocks.UnlockedCount(seen);
+        }
+
+        void MarkUnlocksSeen()
+        {
+            PlayerPrefs.SetInt(UnlockSeenKey, progress.TotalStars);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>새로 열린 게 있다는 작은 빨간 점</summary>
+        void NewDot(Vector3 pos, int order)
+        {
+            ScreenSprite("NewDot", Gfx.Circle, pos, 0.34f, UI.Hard, order);
         }
 
         /// <summary>그리던 판(같은 레벨, 한 수 이상 둠, 아직 진행 중)이 있으면 그대로 돌아간다.</summary>
@@ -306,7 +337,10 @@ namespace BlockAtelier.Game
             // 픽셀 캐릭터
             float ay = yTop - 3.3f;
             AvatarBadge(new Vector3(0f, ay, 0f), 3.3f, 22);
-            ScreenButton("꾸미기", new Vector2(0f, ay - 2.2f), new Vector2(2.4f, 0.8f), false, 22, () => ShowScreen(Page.Avatar));
+            int fresh = NewUnlockCount();
+            var dress = ScreenButton(fresh > 0 ? "꾸미기  ·  새로 " + fresh : "꾸미기", new Vector2(0f, ay - 2.2f),
+                                     new Vector2(fresh > 0 ? 3.4f : 2.4f, 0.8f), fresh > 0, 22, () => ShowScreen(Page.Avatar));
+
 
             // 닉네임
             float ny = yTop - 6.55f;
@@ -386,56 +420,76 @@ namespace BlockAtelier.Game
 
         // ---------------- 캐릭터 꾸미기 ----------------
 
-        static readonly string[] PartLabels = { "피부", "머리 모양", "머리 색", "눈", "입", "옷", "옷 색", "장식" };
-
-        /// <summary>큰 미리보기 + 부위마다 &lt; 값 &gt; 한 줄. 바꾸는 즉시 저장.</summary>
+        /// <summary>
+        /// 큰 미리보기 + 다음 보상 + 부위마다 &lt; 값 &gt; 한 줄. 잠긴 것은 건너뛰고, 바꾸는 즉시 저장.
+        /// </summary>
         void BuildAvatarEditor()
         {
+            MarkUnlocksSeen();
+            int stars = progress.TotalStars;
             screenW = 9.6f;
-            const float rowH = 0.95f;
-            screenH = 7.4f + PartLabels.Length * (rowH + 0.14f) + 1.3f;
+            const float rowH = 0.9f, rowGap = 0.12f;
+            int parts = AvatarSpec.Keys.Length;
+            screenH = 8.6f + parts * (rowH + rowGap) + 1.3f;
             float yTop = screenH * 0.5f, x0 = -screenW * 0.5f;
             ScreenButton("<", new Vector2(x0 + 0.55f, yTop - 0.6f), new Vector2(1.1f, 1.1f), false, 22, () => ShowScreen(Page.MyPage));
             ScreenLabel("캐릭터 꾸미기", new Vector2(x0 + 1.45f, yTop - 0.6f), 0.52f, UI.Ink, TextAnchor.MiddleLeft, 7f, true);
-            AvatarBadge(new Vector3(0f, yTop - 3.9f, 0f), 4.6f, 22);
+            ScreenLabel("별 " + stars + "  ·  열림 " + AvatarUnlocks.UnlockedCount(stars) + "/" + AvatarUnlocks.Schedule.Length,
+                        new Vector2(-x0, yTop - 0.6f), 0.26f, UI.Accent, TextAnchor.MiddleRight, 4f, true);
+            AvatarBadge(new Vector3(0f, yTop - 3.5f, 0f), 4.2f, 22);
 
-            float y = yTop - 7.0f;
+            // 다음 보상: 지금 캐릭터에 입혀 본 모습 + 남은 별
+            float ny = yTop - 6.75f;
+            UI.Panel("Next", screenRoot, new Vector2(0f, ny), new Vector2(screenW, 1.55f), CardColor, 20);
+            var next = AvatarUnlocks.Next(stars);
+            if (next.HasValue)
+            {
+                var e = next.Value;
+                AvatarBadge(screenRoot, new Vector3(x0 + 0.95f, ny, 0f), 1.2f, 22, profile.Look.With(e.Part, e.Value));
+                ScreenLabel("다음 보상: " + AvatarUnlocks.NameOf(e), new Vector2(x0 + 1.8f, ny + 0.3f), 0.3f, UI.Ink, TextAnchor.MiddleLeft, 6f, true);
+                int prev = 0;
+                foreach (var q in AvatarUnlocks.Schedule) if (q.Stars <= stars) prev = q.Stars;
+                float t = Mathf.Clamp01((stars - prev) / (float)Mathf.Max(1, e.Stars - prev));
+                float barW = screenW - 2.4f - 1.9f;
+                UI.Panel("Bar", screenRoot, new Vector2(x0 + 1.8f + barW * 0.5f, ny - 0.3f), new Vector2(barW, 0.26f), UI.Well, 21);
+                if (t > 0.02f)
+                    UI.Panel("BarFill", screenRoot, new Vector2(x0 + 1.8f + barW * t * 0.5f, ny - 0.3f), new Vector2(Mathf.Max(0.26f, barW * t), 0.26f), UI.Accent, 22);
+                ScreenLabel(stars + " / " + e.Stars, new Vector2(-x0 - 0.3f, ny - 0.3f), 0.24f, UI.Muted, TextAnchor.MiddleRight, 2f);
+            }
+            else ScreenLabel("모든 꾸미기를 열었어요!", new Vector2(0f, ny), 0.32f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
+
+            float y = yTop - 8.1f;
             var look = profile.Look;
-            for (int part = 0; part < PartLabels.Length; part++)
+            for (int part = 0; part < parts; part++)
             {
                 int pp = part;
                 UI.Panel("Row", screenRoot, new Vector2(0f, y), new Vector2(screenW, rowH), CardColor, 20);
-                ScreenLabel(PartLabels[part], new Vector2(x0 + 0.35f, y), 0.3f, UI.Ink, TextAnchor.MiddleLeft, 3f, true);
-                int v = look.Get(part), n = look.PartCount(part);
-                float cx = 1.3f;
-                ScreenButton("<", new Vector2(cx - 2.25f, y), new Vector2(0.8f, 0.72f), false, 22, () => ChangePart(pp, -1));
-                ScreenButton(">", new Vector2(cx + 2.25f, y), new Vector2(0.8f, 0.72f), false, 22, () => ChangePart(pp, +1));
-                string[] colors = part == 0 ? AvatarSpec.SkinColors : part == 2 ? AvatarSpec.HairColors : part == 6 ? AvatarSpec.OutfitColors : null;
+                ScreenLabel(AvatarSpec.PartNames[part], new Vector2(x0 + 0.35f, y), 0.28f, UI.Ink, TextAnchor.MiddleLeft, 3f, true);
+                int v = look.Get(part), n = look.PartCount(part), open = 0;
+                for (int k = 0; k < n; k++) if (AvatarUnlocks.IsUnlocked(part, k, stars)) open++;
+                float cx = 0.9f;
+                ScreenButton("<", new Vector2(cx - 2.05f, y), new Vector2(0.78f, 0.68f), false, 22, () => ChangePart(pp, -1));
+                ScreenButton(">", new Vector2(cx + 2.05f, y), new Vector2(0.78f, 0.68f), false, 22, () => ChangePart(pp, +1));
+                var colors = AvatarSpec.ColorsOf(part);
                 if (colors != null)
-                {
-                    UI.Panel("Swatch", screenRoot, new Vector2(cx - 0.45f, y), new Vector2(1.3f, 0.52f), Gfx.Hex(colors[v]), 21);
-                    ScreenLabel((v + 1) + "/" + n, new Vector2(cx + 0.95f, y), 0.24f, UI.Muted, TextAnchor.MiddleCenter, 1.2f);
-                }
+                    UI.Panel("Swatch", screenRoot, new Vector2(cx, y), new Vector2(1.6f, 0.5f), Gfx.Hex(colors[v]), 21);
                 else
-                {
-                    string[] names = part == 1 ? AvatarSpec.HairNames : part == 3 ? AvatarSpec.EyeNames : part == 4 ? AvatarSpec.MouthNames
-                                   : part == 5 ? AvatarSpec.OutfitNames : AvatarSpec.AccessoryNames;
-                    ScreenLabel(names[v], new Vector2(cx, y), 0.28f, UI.Ink, TextAnchor.MiddleCenter, 3.4f, true);
-                }
-                y -= rowH + 0.14f;
+                    ScreenLabel(AvatarSpec.NamesOf(part)[v], new Vector2(cx, y), 0.27f, UI.Ink, TextAnchor.MiddleCenter, 3.2f, true);
+                ScreenLabel(open + "/" + n, new Vector2(-x0 - 0.3f, y), 0.22f, open == n ? UI.Accent : UI.Muted, TextAnchor.MiddleRight, 1.4f);
+                y -= rowH + rowGap;
             }
-            ScreenButton("무작위", new Vector2(-1.5f, y - 0.35f), new Vector2(2.8f, 0.9f), false, 22, () =>
+            ScreenButton("무작위", new Vector2(-1.5f, y - 0.3f), new Vector2(2.8f, 0.9f), false, 22, () =>
             {
-                profile.Look = AvatarSpec.Random(Random.Range(1, 1000000));
+                profile.Look = AvatarSpec.RandomUnlocked(Random.Range(1, 1000000), progress.TotalStars);
                 SaveProfile();
                 BuildScreen();
             });
-            ScreenButton("완료", new Vector2(1.5f, y - 0.35f), new Vector2(2.8f, 0.9f), true, 22, () => ShowScreen(Page.MyPage));
+            ScreenButton("완료", new Vector2(1.5f, y - 0.3f), new Vector2(2.8f, 0.9f), true, 22, () => ShowScreen(Page.MyPage));
         }
 
         void ChangePart(int part, int dir)
         {
-            profile.Look = profile.Look.With(part, profile.Look.Get(part) + dir);
+            profile.Look = profile.Look.StepUnlocked(part, dir, progress.TotalStars);
             SaveProfile();
             BuildScreen();
         }
@@ -493,6 +547,9 @@ namespace BlockAtelier.Game
             {
                 progress = new Progress();
                 SaveProgress();
+                profile.Look = profile.Look.ClampToUnlocked(0);
+                SaveProfile();
+                PlayerPrefs.SetInt(UnlockSeenKey, 0);
                 StartLevel(0);
                 ShowScreen(Page.Settings);
                 ScreenToast("초기화했어요", 0f);

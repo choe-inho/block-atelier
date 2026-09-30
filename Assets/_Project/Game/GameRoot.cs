@@ -323,6 +323,7 @@ namespace BlockAtelier.Game
                 PlayerPrefs.DeleteKey("ba_cleared");
                 SaveProgress();
             }
+            if (profile != null) profile.Look = profile.Look.ClampToUnlocked(progress.TotalStars);
         }
 
         void SaveProgress()
@@ -960,7 +961,9 @@ namespace BlockAtelier.Game
         IEnumerator WinSequence()
         {
             busy = true;
+            int starsBefore = progress.TotalStars;
             var result = progress.Submit(game.Level, game.MovesUsed, game.ContinuesUsed, clock.ElapsedMs);
+            newUnlocks = AvatarUnlocks.Between(starsBefore, progress.TotalStars);
             SaveProgress();
             yield return new WaitForSeconds(0.25f);
             float d = picture.Celebrate();
@@ -1080,10 +1083,13 @@ namespace BlockAtelier.Game
             }
         }
 
+        List<AvatarUnlocks.Entry> newUnlocks = new List<AvatarUnlocks.Entry>();
+
         void ShowWin(SubmitResult res)
         {
             var lv = game.Level;
-            OpenOverlay(13.6f);
+            float sh = newUnlocks.Count > 0 ? 1.0f : 0f;    // 새 꾸미기 알림 줄만큼 버튼을 내린다
+            OpenOverlay(13.6f + sh * 2f);
             UI.Label(overlayCanvas, lv.PictureName + " 완성!", new Vector2(0f, 5.75f), 0.78f, UI.Accent, TextAnchor.MiddleCenter, 8f, true);
 
             // 별: 하나씩 튀어나오며 음이 올라간다. 못 받은 별은 흐리게 자리만.
@@ -1137,12 +1143,26 @@ namespace BlockAtelier.Game
                 Tween.Run(0.5f, k => st.localScale = Vector3.one * (1f + 0.15f * Ease.Bump(k)), null, 1.3f);
             }
 
+            // 별이 늘어 새 꾸미기가 열렸으면: 내 캐릭터에 입혀 본 모습과 함께 알림
+            if (newUnlocks.Count > 0)
+            {
+                var e = newUnlocks[newUnlocks.Count - 1];
+                var look = profile.Look.With(e.Part, e.Value);
+                UI.Panel("UnlockBg", overlayRoot, new Vector2(0f, -2.62f), new Vector2(7.6f, 0.95f), Gfx.Hex("#3A3A28"), 84);
+                AvatarBadge(overlayRoot, new Vector3(-3.25f, -2.62f, 0f), 0.78f, 85, look);
+                string names = AvatarUnlocks.NameOf(e) + (newUnlocks.Count > 1 ? " 외 " + (newUnlocks.Count - 1) + "개" : "");
+                var ul = UI.Label(overlayCanvas, "새 꾸미기 열림: " + names, new Vector2(-2.7f, -2.62f), 0.28f, UI.Accent, TextAnchor.MiddleLeft, 6.2f, true);
+                var ut = ul.transform;
+                Tween.Run(0.5f, q => ut.localScale = Vector3.one * (1f + 0.12f * Ease.Bump(q)), null, 1.4f);
+                Tween.After(1.45f, () => Sfx.PlayNote(9, 0.7f));
+            }
+
             bool hasNext = levelIndex < levels.Count - 1;
-            if (hasNext) OverlayButton("다음 레벨", -3.3f, true, () => StartLevel(levelIndex + 1));
-            else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -3.3f), 0.34f, UI.Ink);
-            OverlayButton(res.Stars < 3 ? "다시 해서 별 모으기" : "홈으로", -4.7f, false,
+            if (hasNext) OverlayButton("다음 레벨", -3.3f - sh, true, () => StartLevel(levelIndex + 1));
+            else UI.Label(overlayCanvas, "모든 그림을 완성했어요!", new Vector2(0f, -3.3f - sh), 0.34f, UI.Ink);
+            OverlayButton(res.Stars < 3 ? "다시 해서 별 모으기" : "홈으로", -4.7f - sh, false,
                           res.Stars < 3 ? (System.Action)(() => StartLevel(levelIndex)) : GoHome);
-            if (res.Stars < 3) OverlayButton("홈으로", -6.0f, false, GoHome);
+            if (res.Stars < 3) OverlayButton("홈으로", -6.0f - sh, false, GoHome);
             busy = false;
         }
 

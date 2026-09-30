@@ -75,6 +75,56 @@ namespace BlockAtelier.Tests
         }
 
         [Test]
+        public void 잠긴_꾸미기는_모두_한_번씩_별로_열린다()
+        {
+            var spec = new AvatarSpec();
+            var seen = new HashSet<string>();
+            foreach (var e in AvatarUnlocks.Schedule)
+            {
+                Assert.IsFalse(AvatarUnlocks.IsFree(e.Part, e.Value), "무료인데 목록에 있음 " + e.Part + ":" + e.Value);
+                Assert.IsTrue(e.Value < spec.PartCount(e.Part));
+                Assert.IsTrue(seen.Add(e.Part + ":" + e.Value), "중복 " + e.Part + ":" + e.Value);
+            }
+            for (int p = 0; p < AvatarSpec.Keys.Length; p++)
+                for (int v = 0; v < spec.PartCount(p); v++)
+                    Assert.IsTrue(AvatarUnlocks.IsFree(p, v) || seen.Contains(p + ":" + v), "열 방법이 없음 " + p + ":" + v);
+            var sch = AvatarUnlocks.Schedule;
+            Assert.AreEqual(AvatarUnlocks.FirstStars, sch[0].Stars);
+            Assert.AreEqual(AvatarUnlocks.LastStars, sch[sch.Length - 1].Stars);
+            for (int i = 1; i < sch.Length; i++) Assert.IsTrue(sch[i].Stars > sch[i - 1].Stars);
+        }
+
+        [Test]
+        public void 별이_늘면_새로_열린_것을_알려준다()
+        {
+            Assert.AreEqual(0, AvatarUnlocks.Between(0, 2).Count);
+            var first = AvatarUnlocks.Between(0, 3);
+            Assert.AreEqual(1, first.Count);
+            Assert.AreEqual("고양이 귀", AvatarUnlocks.NameOf(first[0]));
+            Assert.IsFalse(AvatarUnlocks.IsUnlocked(first[0].Part, first[0].Value, 2));
+            Assert.IsTrue(AvatarUnlocks.IsUnlocked(first[0].Part, first[0].Value, 3));
+            Assert.AreEqual(AvatarUnlocks.Schedule.Length, AvatarUnlocks.Between(0, 300).Count);
+            Assert.IsTrue(AvatarUnlocks.Next(300) == null);
+            Assert.AreEqual(AvatarUnlocks.Schedule[1].Stars, AvatarUnlocks.Next(3).Value.Stars);
+        }
+
+        [Test]
+        public void 무작위_캐릭터는_열린_것만_쓰고_잠긴_것은_되돌린다()
+        {
+            for (int seed = 0; seed < 200; seed++)
+            {
+                var a = AvatarSpec.Random(seed);
+                for (int p = 0; p < AvatarSpec.Keys.Length; p++) Assert.IsTrue(AvatarUnlocks.IsUnlocked(p, a.Get(p), 0));
+            }
+            var crown = new AvatarSpec().With(7, 8).With(1, 11);
+            var clamped = crown.ClampToUnlocked(10);
+            Assert.AreEqual(0, clamped.Accessory);
+            Assert.AreEqual(0, clamped.Hair);
+            Assert.AreEqual(8, crown.ClampToUnlocked(300).Accessory);
+            Assert.AreEqual(0, AvatarSpec.Parse("s1h1c1e2m0o2p0a0").Value.Background);   // 예전 저장(배경 없음)도 읽힘
+        }
+
+        [Test]
         public void 설정_저장()
         {
             var s = new GameSettings { Sound = false, ReduceMotion = true };
